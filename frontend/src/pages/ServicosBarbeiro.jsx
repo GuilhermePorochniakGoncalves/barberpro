@@ -200,7 +200,17 @@ function ServicosBarbeiro() {
       )}
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-        <table className="w-full">
+        {!carregando && servicos.length === 0 ? (
+          <EmptyState
+            icon="📋"
+            title="Nenhum serviço cadastrado"
+            description="Cadastre os serviços oferecidos por esse barbeiro, com preço, pra poder usá-los nos agendamentos."
+            actionLabel="Novo serviço"
+            onAction={abrirNovo}
+          />
+        ) : (
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[480px]">
           <thead className="bg-zinc-950">
             <tr>
               <th className="text-left p-4 text-zinc-400 font-medium">Serviço</th>
@@ -211,18 +221,6 @@ function ServicosBarbeiro() {
           <tbody>
             {carregando ? (
               <SkeletonTableRows colunas={3} />
-            ) : servicos.length === 0 ? (
-              <tr>
-                <td colSpan="3">
-                  <EmptyState
-                    icon="📋"
-                    title="Nenhum serviço cadastrado"
-                    description="Cadastre os serviços oferecidos por esse barbeiro, com preço, pra poder usá-los nos agendamentos."
-                    actionLabel="Novo serviço"
-                    onAction={abrirNovo}
-                  />
-                </td>
-              </tr>
             ) : (
               servicos.map((s) => (
                 <tr key={s.id} className="border-t border-zinc-800">
@@ -241,6 +239,8 @@ function ServicosBarbeiro() {
             )}
           </tbody>
         </table>
+        </div>
+        )}
       </div>
 
       {modal}

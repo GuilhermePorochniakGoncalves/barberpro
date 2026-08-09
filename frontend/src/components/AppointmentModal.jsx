@@ -114,7 +114,7 @@ function AppointmentModal({
   const bloqueado = salvando || cancelando;
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 animate-fade-in">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-fade-in">
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md animate-scale-in">
         <h2 className="text-2xl font-bold mb-2 text-white">
           {modoEdicao ? "Editar agendamento" : "Novo agendamento"}

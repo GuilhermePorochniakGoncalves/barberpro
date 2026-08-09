@@ -76,7 +76,15 @@ function Clients() {
       {erro && <p className="text-red-400 mb-4">{erro}</p>}
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-        <table className="w-full">
+        {!carregando && clientes.length === 0 ? (
+          <EmptyState
+            icon="👤"
+            title="Nenhum cliente cadastrado"
+            description="Os clientes aparecem aqui automaticamente assim que alguém agendar um horário."
+          />
+        ) : (
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[600px]">
           <thead className="bg-zinc-950">
             <tr>
               <th className="text-left p-4 text-zinc-400 font-medium">Nome</th>
@@ -89,16 +97,6 @@ function Clients() {
           <tbody>
             {carregando ? (
               <SkeletonTableRows colunas={4} />
-            ) : clientes.length === 0 ? (
-              <tr>
-                <td colSpan="4">
-                  <EmptyState
-                    icon="👤"
-                    title="Nenhum cliente cadastrado"
-                    description="Os clientes aparecem aqui automaticamente assim que alguém agendar um horário."
-                  />
-                </td>
-              </tr>
             ) : (
               clientes.map((cliente) => (
                 <Fragment key={cliente.id}>
@@ -151,6 +149,8 @@ function Clients() {
             )}
           </tbody>
         </table>
+        </div>
+        )}
       </div>
     </Layout>
   );

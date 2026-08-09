@@ -203,7 +203,7 @@ function BarbeiroAgenda() {
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center flex-wrap gap-3">
             <button
               onClick={() => setDataSelecionada((d) => adicionarDias(d, -1))}
               className="px-3 py-2 border border-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-800"
@@ -213,7 +213,7 @@ function BarbeiroAgenda() {
             </button>
 
             <div className="text-center">
-              <p className="font-semibold text-zinc-100">{formatarDataExibicao(dataSelecionada)}</p>
+              <p className="font-semibold text-zinc-100 whitespace-nowrap">{formatarDataExibicao(dataSelecionada)}</p>
               {ehHoje(dataSelecionada) && <p className="text-xs text-amber-500">Hoje</p>}
             </div>
 
@@ -275,7 +275,7 @@ function BarbeiroAgenda() {
               return (
                 <div
                   key={horario}
-                  className={`flex items-center gap-4 rounded-xl border p-3 ${
+                  className={`flex flex-wrap items-center gap-3 rounded-xl border p-3 ${
                     agendamento
                       ? concluido
                         ? "bg-zinc-900/40 border-zinc-800"
@@ -289,7 +289,7 @@ function BarbeiroAgenda() {
 
                   {agendamento ? (
                     <>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-[140px]">
                         <p className={`font-semibold ${concluido ? "text-zinc-600 line-through" : "text-zinc-100"}`}>
                           {agendamento.nome}
                         </p>
@@ -299,7 +299,7 @@ function BarbeiroAgenda() {
                       {concluido ? (
                         <span className="text-sm text-zinc-500 px-3 py-2">Concluído ✓</span>
                       ) : (
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           <button
                             onClick={() => abrirModalSlot(horario)}
                             className="px-3 py-2 border border-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-800 text-sm"
@@ -316,7 +316,7 @@ function BarbeiroAgenda() {
                       )}
                     </>
                   ) : bloqueado ? (
-                    <div className="flex-1 flex items-center justify-between">
+                    <div className="flex-1 min-w-[160px] flex items-center justify-between">
                       <span className="text-red-400 text-sm">
                         {diaInteiroBloqueado ? "Folga do dia" : "Bloqueado"}
                       </span>
@@ -330,7 +330,7 @@ function BarbeiroAgenda() {
                       )}
                     </div>
                   ) : (
-                    <div className="flex-1 flex items-center justify-between">
+                    <div className="flex-1 min-w-[160px] flex items-center justify-between">
                       <button
                         onClick={() => abrirModalSlot(horario)}
                         className="text-left text-zinc-500 hover:text-amber-500 py-2"

@@ -165,7 +165,17 @@ function Produtos() {
       )}
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-        <table className="w-full">
+        {!carregando && produtos.length === 0 ? (
+          <EmptyState
+            icon="🧴"
+            title="Nenhum produto cadastrado"
+            description="Cadastre os produtos vendidos na barbearia, com preço e estoque."
+            actionLabel="Novo produto"
+            onAction={abrirNovo}
+          />
+        ) : (
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px]">
           <thead className="bg-zinc-950">
             <tr>
               <th className="text-left p-4 text-zinc-400 font-medium">Produto</th>
@@ -177,18 +187,6 @@ function Produtos() {
           <tbody>
             {carregando ? (
               <SkeletonTableRows colunas={4} />
-            ) : produtos.length === 0 ? (
-              <tr>
-                <td colSpan="4">
-                  <EmptyState
-                    icon="🧴"
-                    title="Nenhum produto cadastrado"
-                    description="Cadastre os produtos vendidos na barbearia, com preço e estoque."
-                    actionLabel="Novo produto"
-                    onAction={abrirNovo}
-                  />
-                </td>
-              </tr>
             ) : (
               produtos.map((p) => (
                 <tr key={p.id} className="border-t border-zinc-800">
@@ -210,6 +208,8 @@ function Produtos() {
             )}
           </tbody>
         </table>
+        </div>
+        )}
       </div>
 
       {modal}

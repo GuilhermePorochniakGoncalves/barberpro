@@ -79,7 +79,7 @@ function Barbeiros() {
       {criando && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-6">
           <h2 className="font-bold text-lg mb-3 text-zinc-100">Novo barbeiro</h2>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <input
               type="text"
               autoFocus
@@ -87,7 +87,7 @@ function Barbeiros() {
               value={nomeNovo}
               onChange={(e) => setNomeNovo(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && salvarNovoBarbeiro()}
-              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-zinc-100 placeholder:text-zinc-500"
+              className="flex-1 min-w-[200px] bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-zinc-100 placeholder:text-zinc-500"
               disabled={salvando}
             />
             <button

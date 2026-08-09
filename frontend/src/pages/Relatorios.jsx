@@ -106,7 +106,8 @@ function Relatorios() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
               <h2 className="text-lg font-bold p-6 pb-4 text-zinc-100">Faturamento por barbeiro</h2>
-              <table className="w-full">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[420px]">
                 <thead className="bg-zinc-950">
                   <tr>
                     <th className="text-left p-4 text-zinc-400 font-medium">Barbeiro</th>
@@ -132,11 +133,13 @@ function Relatorios() {
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
 
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
               <h2 className="text-lg font-bold p-6 pb-4 text-zinc-100">Formas de pagamento mais usadas</h2>
-              <table className="w-full">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[420px]">
                 <thead className="bg-zinc-950">
                   <tr>
                     <th className="text-left p-4 text-zinc-400 font-medium">Forma</th>
@@ -164,6 +167,7 @@ function Relatorios() {
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         </>
