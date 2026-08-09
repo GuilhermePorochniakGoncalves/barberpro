@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Layout from "../components/Layout";
+import { Skeleton, SkeletonStatCards, SkeletonTableRows } from "../components/Skeleton";
 import api from "../services/api";
 import { mesAtualISO } from "../utils/date";
 import { extrairMensagemErro } from "../utils/erro";
@@ -67,7 +68,23 @@ function Relatorios() {
       {erro && <p className="text-red-400 mb-4">{erro}</p>}
 
       {carregando ? (
-        <p className="text-zinc-500 py-8 text-center">Carregando relatório...</p>
+        <>
+          <SkeletonStatCards />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {[0, 1].map((i) => (
+              <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+                <div className="p-6 pb-4">
+                  <Skeleton className="h-5 w-48" />
+                </div>
+                <table className="w-full">
+                  <tbody>
+                    <SkeletonTableRows colunas={3} linhas={4} />
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        </>
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">

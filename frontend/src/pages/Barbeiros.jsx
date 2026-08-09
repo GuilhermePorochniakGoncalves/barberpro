@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
+import EmptyState from "../components/EmptyState";
+import { SkeletonCards } from "../components/Skeleton";
 import { useBarbeiros } from "../context/useBarbeiros";
 import { iniciais, corAvatar } from "../utils/avatar";
 
@@ -90,10 +92,16 @@ function Barbeiros() {
       )}
 
       {carregando ? (
-        <p className="text-zinc-500 py-8 text-center">Carregando barbeiros...</p>
+        <SkeletonCards />
       ) : ativos.length === 0 ? (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-10 text-center text-zinc-500">
-          Nenhum barbeiro cadastrado ainda.
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl">
+          <EmptyState
+            icon="✂️"
+            title="Nenhum barbeiro cadastrado"
+            description="Cadastre o primeiro barbeiro pra começar a organizar a agenda da barbearia."
+            actionLabel="Novo barbeiro"
+            onAction={() => setCriando(true)}
+          />
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">

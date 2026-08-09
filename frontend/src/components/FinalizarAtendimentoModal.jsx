@@ -100,8 +100,8 @@ function FinalizarAtendimentoModal({ isOpen, onClose, agendamento, catalogo = []
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 animate-fade-in">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto animate-scale-in">
         <h2 className="text-2xl font-bold mb-1 text-white">Finalizar atendimento</h2>
         <p className="text-zinc-400 mb-6">
           {agendamento.nome} • {agendamento.horario}

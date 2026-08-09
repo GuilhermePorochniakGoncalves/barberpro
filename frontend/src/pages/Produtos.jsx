@@ -1,5 +1,7 @@
 import { useState } from "react";
 import Layout from "../components/Layout";
+import EmptyState from "../components/EmptyState";
+import { SkeletonTableRows } from "../components/Skeleton";
 import { useBarbeiros } from "../context/useBarbeiros";
 
 function formatarReais(valor) {
@@ -168,12 +170,18 @@ function Produtos() {
           </thead>
           <tbody>
             {carregando ? (
-              <tr>
-                <td colSpan="4" className="p-8 text-center text-zinc-500">Carregando...</td>
-              </tr>
+              <SkeletonTableRows colunas={4} />
             ) : produtos.length === 0 ? (
               <tr>
-                <td colSpan="4" className="p-8 text-center text-zinc-500">Nenhum produto cadastrado.</td>
+                <td colSpan="4">
+                  <EmptyState
+                    icon="🧴"
+                    title="Nenhum produto cadastrado"
+                    description="Cadastre os produtos vendidos na barbearia, com preço e estoque."
+                    actionLabel="Novo produto"
+                    onAction={abrirNovo}
+                  />
+                </td>
               </tr>
             ) : (
               produtos.map((p) => (

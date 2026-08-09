@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Layout from "../components/Layout";
 import AppointmentModal from "../components/AppointmentModal";
 import FinalizarAtendimentoModal from "../components/FinalizarAtendimentoModal";
+import { SkeletonList } from "../components/Skeleton";
 import api from "../services/api";
 import { useBarbeiros } from "../context/useBarbeiros";
 import { useAuth } from "../context/useAuth";
@@ -356,7 +357,7 @@ function BarbeiroAgenda() {
         )}
 
         {carregando ? (
-          <p className="text-zinc-500 py-8 text-center">Carregando agenda...</p>
+          <SkeletonList linhas={HORARIOS.length} />
         ) : (
           <div className="space-y-2">
             {HORARIOS.map((horario) => {

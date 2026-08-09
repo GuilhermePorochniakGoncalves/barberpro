@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import Layout from "../components/Layout";
+import EmptyState from "../components/EmptyState";
+import { SkeletonTableRows } from "../components/Skeleton";
 import api from "../services/api";
 import { useAuth } from "../context/useAuth";
 import { extrairMensagemErro } from "../utils/erro";
@@ -184,13 +186,17 @@ function MeusServicos() {
           </thead>
           <tbody>
             {carregando ? (
-              <tr>
-                <td colSpan="3" className="p-8 text-center text-zinc-500">Carregando...</td>
-              </tr>
+              <SkeletonTableRows colunas={3} />
             ) : servicos.length === 0 ? (
               <tr>
-                <td colSpan="3" className="p-8 text-center text-zinc-500">
-                  Você ainda não cadastrou nenhum serviço.
+                <td colSpan="3">
+                  <EmptyState
+                    icon="📋"
+                    title="Nenhum serviço cadastrado"
+                    description="Cadastre os serviços que você oferece, com preço, pra poder usá-los nos agendamentos."
+                    actionLabel="Novo serviço"
+                    onAction={abrirNovo}
+                  />
                 </td>
               </tr>
             ) : (

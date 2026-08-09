@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import Layout from "../components/Layout";
+import EmptyState from "../components/EmptyState";
+import { SkeletonTableRows } from "../components/Skeleton";
 import { useBarber } from "../context/useBarber";
 import api from "../services/api";
 import { extrairMensagemErro } from "../utils/erro";
@@ -86,15 +88,15 @@ function Clients() {
 
           <tbody>
             {carregando ? (
-              <tr>
-                <td colSpan="4" className="p-8 text-center text-zinc-500">
-                  Carregando...
-                </td>
-              </tr>
+              <SkeletonTableRows colunas={4} />
             ) : clientes.length === 0 ? (
               <tr>
-                <td colSpan="4" className="p-8 text-center text-zinc-500">
-                  Nenhum cliente cadastrado
+                <td colSpan="4">
+                  <EmptyState
+                    icon="👤"
+                    title="Nenhum cliente cadastrado"
+                    description="Os clientes aparecem aqui automaticamente assim que alguém agendar um horário."
+                  />
                 </td>
               </tr>
             ) : (
