@@ -6,6 +6,7 @@ import FinalizarAtendimentoModal from "../components/FinalizarAtendimentoModal";
 import { SkeletonList } from "../components/Skeleton";
 import api from "../services/api";
 import { useBarbeiros } from "../context/useBarbeiros";
+import { useDisponibilidade } from "../hooks/useDisponibilidade";
 import { HORARIOS } from "../constants/schedule";
 import { adicionarDias, ehHoje, formatarDataExibicao, hojeISO } from "../utils/date";
 import { extrairMensagemErro } from "../utils/erro";
@@ -23,11 +24,21 @@ function BarbeiroAgenda() {
   const barbeiro = barbeiros.find((b) => b.id === barbeiroId);
 
   const [dataSelecionada, setDataSelecionada] = useState(hojeISO());
-  const [agendamentos, setAgendamentos] = useState([]);
   const [catalogo, setCatalogo] = useState([]);
-  const [bloqueios, setBloqueios] = useState([]);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState(null);
+  const [carregandoCatalogo, setCarregandoCatalogo] = useState(true);
+  const [erroAcao, setErroAcao] = useState(null);
+
+  const {
+    carregando: carregandoDisponibilidade,
+    erro: erroDisponibilidade,
+    recarregar: recarregarDisponibilidade,
+    buscarAgendamento,
+    diaInteiroBloqueado,
+    bloqueioDoHorario,
+  } = useDisponibilidade(barbeiroId, dataSelecionada);
+
+  const carregando = carregandoDisponibilidade || carregandoCatalogo;
+  const erro = erroAcao || erroDisponibilidade;
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalKey, setModalKey] = useState(0);
@@ -38,37 +49,21 @@ function BarbeiroAgenda() {
   const [agendamentoParaFinalizar, setAgendamentoParaFinalizar] = useState(null);
 
   useEffect(() => {
-    carregarAgenda();
+    // eslint-disable-next-line react-hooks/immutability
+    carregarCatalogo();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [barbeiroId, dataSelecionada]);
+  }, [barbeiroId]);
 
-  async function carregarAgenda() {
-    setCarregando(true);
-    setErro(null);
+  async function carregarCatalogo() {
+    setCarregandoCatalogo(true);
     try {
-      const [agendamentosRes, catalogoRes, bloqueiosRes] = await Promise.all([
-        api.get("/agendamentos", { params: { barbeiroId, data: dataSelecionada } }),
-        api.get("/catalogo", { params: { barbeiroId } }),
-        api.get(`/barbeiros/${barbeiroId}/bloqueios`, { params: { data: dataSelecionada } }),
-      ]);
-      setAgendamentos(agendamentosRes.data);
-      setCatalogo(catalogoRes.data);
-      setBloqueios(bloqueiosRes.data);
+      const response = await api.get("/catalogo", { params: { barbeiroId } });
+      setCatalogo(response.data);
     } catch (error) {
-      setErro(extrairMensagemErro(error, "Não foi possível carregar a agenda."));
+      setErroAcao(extrairMensagemErro(error, "Não foi possível carregar o catálogo."));
     } finally {
-      setCarregando(false);
+      setCarregandoCatalogo(false);
     }
-  }
-
-  function buscarAgendamento(horario) {
-    return agendamentos.find((a) => a.horario === horario);
-  }
-
-  const diaInteiroBloqueado = bloqueios.find((b) => b.horario === null);
-
-  function bloqueioDoHorario(horario) {
-    return bloqueios.find((b) => b.horario === horario);
   }
 
   function abrirModalSlot(horario) {
@@ -97,7 +92,7 @@ function BarbeiroAgenda() {
         ? await api.put(`/agendamentos/${agendamentoSelecionado.id}`, dados)
         : await api.post("/agendamentos", dados);
 
-      await carregarAgenda();
+      await recarregarDisponibilidade();
       return { sucesso: true, agendamento: response.data };
     } catch (error) {
       return {
@@ -110,7 +105,7 @@ function BarbeiroAgenda() {
   async function cancelarAgendamento(agendamentoId) {
     try {
       await api.delete(`/agendamentos/${agendamentoId}`);
-      await carregarAgenda();
+      await recarregarDisponibilidade();
       return { sucesso: true };
     } catch (error) {
       return {
@@ -121,37 +116,41 @@ function BarbeiroAgenda() {
   }
 
   async function alternarBloqueioDia() {
-    setErro(null);
+    setErroAcao(null);
     try {
       if (diaInteiroBloqueado) {
         await api.delete(`/barbeiros/${barbeiroId}/bloqueios/${diaInteiroBloqueado.id}`);
       } else {
         await api.post(`/barbeiros/${barbeiroId}/bloqueios`, { data: dataSelecionada });
       }
-      await carregarAgenda();
+      await recarregarDisponibilidade();
     } catch (error) {
-      setErro(extrairMensagemErro(error, "Não foi possível atualizar a folga do dia."));
+      setErroAcao(extrairMensagemErro(error, "Não foi possível atualizar a folga do dia."));
     }
   }
 
   async function bloquearHorario(horario) {
-    setErro(null);
+    setErroAcao(null);
     try {
       await api.post(`/barbeiros/${barbeiroId}/bloqueios`, { data: dataSelecionada, horario });
-      await carregarAgenda();
+      await recarregarDisponibilidade();
     } catch (error) {
-      setErro(extrairMensagemErro(error, "Não foi possível bloquear o horário."));
+      setErroAcao(extrairMensagemErro(error, "Não foi possível bloquear o horário."));
     }
   }
 
   async function desbloquearHorario(bloqueioId) {
-    setErro(null);
+    setErroAcao(null);
     try {
       await api.delete(`/barbeiros/${barbeiroId}/bloqueios/${bloqueioId}`);
-      await carregarAgenda();
+      await recarregarDisponibilidade();
     } catch (error) {
-      setErro(extrairMensagemErro(error, "Não foi possível desbloquear o horário."));
+      setErroAcao(extrairMensagemErro(error, "Não foi possível desbloquear o horário."));
     }
+  }
+
+  async function aoFinalizarAtendimento() {
+    await recarregarDisponibilidade();
   }
 
   if (!carregandoBarbeiros && !barbeiro) {
@@ -193,12 +192,20 @@ function BarbeiroAgenda() {
           )}
         </div>
 
-        <button
-          onClick={() => navigate(`/barbeiros/${barbeiroId}/servicos`)}
-          className="text-sm text-amber-500 hover:text-amber-400"
-        >
-          Gerenciar serviços
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate(`/agendar/${barbeiroId}`)}
+            className="text-sm text-zinc-400 hover:text-zinc-200"
+          >
+            Link público de agendamento
+          </button>
+          <button
+            onClick={() => navigate(`/barbeiros/${barbeiroId}/servicos`)}
+            className="text-sm text-amber-500 hover:text-amber-400"
+          >
+            Gerenciar serviços
+          </button>
+        </div>
       </div>
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
@@ -371,7 +378,7 @@ function BarbeiroAgenda() {
         onClose={() => setPagamentoOpen(false)}
         agendamento={agendamentoParaFinalizar}
         catalogo={catalogo}
-        onFinalizado={carregarAgenda}
+        onFinalizado={aoFinalizarAtendimento}
       />
     </Layout>
   );

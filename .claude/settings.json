@@ -21,7 +21,13 @@
       "Bash(node shot-nologin.cjs)",
       "Bash(node shot-block2.cjs)",
       "Bash(node shot-responsive.cjs)",
-      "Bash(rm -rf dist)"
+      "Bash(rm -rf dist)",
+      "Bash(curl -s -X POST http://localhost:3001/barbeiros -H \"Content-Type: application/json\" -d '{\"nome\":\"Zaqueu\"}')",
+      "Bash(echo)",
+      "Bash(curl -s -X POST http://localhost:3001/barbeiros/1/servicos -H \"Content-Type: application/json\" -d '{\"nome\":\"Corte Simples\",\"preco\":30}')",
+      "Bash(node shot-agendar.cjs)",
+      "Bash(curl -s \"http://localhost:3001/agendamentos?barbeiroId=1&data=2026-08-09\")",
+      "Bash(node shot-check.cjs)"
     ]
   }
 }
