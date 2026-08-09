@@ -2,6 +2,7 @@ import { useState } from "react";
 import Layout from "../components/Layout";
 import EmptyState from "../components/EmptyState";
 import { SkeletonTableRows } from "../components/Skeleton";
+import { useConfirm } from "../hooks/useConfirm";
 import { useBarbeiros } from "../context/useBarbeiros";
 
 function formatarReais(valor) {
@@ -9,11 +10,12 @@ function formatarReais(valor) {
 }
 
 // Produtos são compartilhados pela barbearia inteira (pomada, óleo de
-// barba etc.) — qualquer barbeiro autenticado gerencia preço e estoque.
-// O estoque é baixado automaticamente quando o produto é vendido no
-// fechamento de um atendimento (ver FinalizarAtendimentoModal).
+// barba etc.) — qualquer um gerencia preço e estoque. O estoque é baixado
+// automaticamente quando o produto é vendido no fechamento de um
+// atendimento (ver FinalizarAtendimentoModal).
 function Produtos() {
   const { produtos, carregando, erro, criarProduto, atualizarProduto, removerProduto } = useBarbeiros();
+  const { confirmar, modal } = useConfirm();
 
   const [criando, setCriando] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
@@ -83,8 +85,12 @@ function Produtos() {
   }
 
   async function remover(produto) {
-    const confirmado = window.confirm(`Remover o produto "${produto.nome}"?`);
-    if (!confirmado) return;
+    const ok = await confirmar({
+      titulo: "Remover produto",
+      mensagem: `Remover o produto "${produto.nome}"? Essa ação não pode ser desfeita.`,
+      confirmarLabel: "Remover",
+    });
+    if (!ok) return;
     await removerProduto(produto.id);
   }
 
@@ -205,6 +211,8 @@ function Produtos() {
           </tbody>
         </table>
       </div>
+
+      {modal}
     </Layout>
   );
 }

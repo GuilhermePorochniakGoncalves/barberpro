@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { HORARIOS, formatarTelefone } from "../constants/schedule";
 import { formatarDataExibicao } from "../utils/date";
+import { useConfirm } from "../hooks/useConfirm";
 
 // `barbeiroId`/`data`: sempre fixos, vêm da agenda do dia que abriu o modal.
 // `horario`: pré-selecionado ao clicar num slot; vazio no fluxo "Novo
@@ -40,6 +41,7 @@ function AppointmentModal({
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
+  const { confirmar, modal: modalConfirmacao } = useConfirm();
 
   if (!isOpen) return null;
 
@@ -86,9 +88,12 @@ function AppointmentModal({
   async function cancelar() {
     if (!agendamento) return;
 
-    const confirmado = window.confirm(
-      `Cancelar o agendamento de ${agendamento.nome} às ${agendamento.horario}?`
-    );
+    const confirmado = await confirmar({
+      titulo: "Cancelar agendamento",
+      mensagem: `Cancelar o agendamento de ${agendamento.nome} às ${agendamento.horario}? Essa ação não pode ser desfeita.`,
+      confirmarLabel: "Cancelar agendamento",
+      cancelarLabel: "Voltar",
+    });
     if (!confirmado) return;
 
     setCancelando(true);
@@ -208,6 +213,8 @@ function AppointmentModal({
           </div>
         </div>
       </div>
+
+      {modalConfirmacao}
     </div>
   );
 }

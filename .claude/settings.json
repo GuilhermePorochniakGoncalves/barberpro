@@ -18,7 +18,8 @@
       "Bash(echo \"MAIN_PUSH_EXIT:$?\")",
       "Bash(echo \"BRANCH_PUSH_EXIT:$?\")",
       "Bash(node shot-block1.cjs)",
-      "Bash(node shot-nologin.cjs)"
+      "Bash(node shot-nologin.cjs)",
+      "Bash(node shot-block2.cjs)"
     ]
   }
 }

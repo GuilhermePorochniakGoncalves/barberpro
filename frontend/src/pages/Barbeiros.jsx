@@ -3,12 +3,16 @@ import { useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
 import EmptyState from "../components/EmptyState";
 import { SkeletonCards } from "../components/Skeleton";
+import { useConfirm } from "../hooks/useConfirm";
 import { useBarbeiros } from "../context/useBarbeiros";
+import { useToast } from "../context/useToast";
 import { iniciais, corAvatar } from "../utils/avatar";
 
 function Barbeiros() {
-  const { barbeiros, carregando, erro, criarBarbeiro } = useBarbeiros();
+  const { barbeiros, carregando, erro, criarBarbeiro, removerBarbeiro } = useBarbeiros();
   const navigate = useNavigate();
+  const { confirmar, modal } = useConfirm();
+  const { mostrarToast } = useToast();
 
   const [criando, setCriando] = useState(false);
   const [nomeNovo, setNomeNovo] = useState("");
@@ -37,6 +41,24 @@ function Barbeiros() {
 
     setNomeNovo("");
     setCriando(false);
+  }
+
+  async function remover(barbeiro) {
+    const ok = await confirmar({
+      titulo: "Remover barbeiro",
+      mensagem: `Remover "${barbeiro.nome}"? Essa ação não pode ser desfeita.`,
+      confirmarLabel: "Remover",
+    });
+    if (!ok) return;
+
+    const resultado = await removerBarbeiro(barbeiro.id);
+    if (!resultado.sucesso) {
+      mostrarToast(resultado.mensagem, "erro");
+    } else if (resultado.aviso) {
+      // Backend desativa em vez de excluir quando há histórico — avisa
+      // por que o barbeiro ainda pode aparecer em relatórios antigos.
+      mostrarToast(resultado.aviso, "aviso");
+    }
   }
 
   return (
@@ -106,23 +128,38 @@ function Barbeiros() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           {ativos.map((barbeiro) => (
-            <button
+            <div
               key={barbeiro.id}
-              onClick={() => navigate(`/barbeiros/${barbeiro.id}`)}
-              className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col items-center gap-3 hover:border-amber-700/50 hover:-translate-y-0.5 transition"
+              className="relative bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-amber-700/50 transition"
             >
-              <div
-                className={`w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold ${corAvatar(
-                  barbeiro.nome
-                )}`}
+              <button
+                onClick={() => remover(barbeiro)}
+                className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full text-zinc-600 hover:text-red-400 hover:bg-red-950/30 text-sm"
+                aria-label={`Remover ${barbeiro.nome}`}
+                title="Remover barbeiro"
               >
-                {iniciais(barbeiro.nome)}
-              </div>
-              <span className="font-semibold text-zinc-100">{barbeiro.nome}</span>
-            </button>
+                ✕
+              </button>
+
+              <button
+                onClick={() => navigate(`/barbeiros/${barbeiro.id}`)}
+                className="w-full p-6 flex flex-col items-center gap-3 hover:-translate-y-0.5 transition"
+              >
+                <div
+                  className={`w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold ${corAvatar(
+                    barbeiro.nome
+                  )}`}
+                >
+                  {iniciais(barbeiro.nome)}
+                </div>
+                <span className="font-semibold text-zinc-100">{barbeiro.nome}</span>
+              </button>
+            </div>
           ))}
         </div>
       )}
+
+      {modal}
     </Layout>
   );
 }
