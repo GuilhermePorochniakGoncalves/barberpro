@@ -14,7 +14,21 @@ const {
   validarCliente,
   validarBarbeiro,
   validarVenda,
+  validarCredenciaisLogin,
+  validarDefinicaoLogin,
+  validarServico,
+  validarProduto,
+  validarBloqueio,
 } = require("./validation");
+const {
+  hashSenha,
+  verificarSenha,
+  criarSessao,
+  removerSessao,
+  resolverToken,
+  autenticar,
+  barrarSeNaoForDono,
+} = require("./auth");
 
 const app = express();
 
@@ -23,15 +37,22 @@ app.use(express.json());
 
 // ---------- Helpers ----------
 
-function servicosAtivos() {
+function servicosAtivosDoBarbeiro(barbeiroId) {
   return db
-    .prepare("SELECT nome FROM catalogo_itens WHERE tipo = 'servico' AND ativo = 1")
-    .all()
+    .prepare("SELECT nome FROM catalogo_itens WHERE tipo = 'servico' AND ativo = 1 AND barbeiro_id = ?")
+    .all(barbeiroId)
     .map((r) => r.nome);
 }
 
-function catalogoAtivoMap() {
-  const itens = db.prepare("SELECT nome, tipo, preco FROM catalogo_itens WHERE ativo = 1").all();
+// Catálogo disponível pra um barbeiro finalizar um atendimento: os próprios
+// serviços + todos os produtos compartilhados (ambos ativos).
+function catalogoAtivoMap(barbeiroId) {
+  const itens = db
+    .prepare(
+      `SELECT id, nome, tipo, preco, estoque FROM catalogo_itens
+       WHERE ativo = 1 AND (tipo = 'produto' OR barbeiro_id = ?)`
+    )
+    .all(barbeiroId);
   return new Map(itens.map((i) => [i.nome, i]));
 }
 
@@ -58,10 +79,84 @@ function buscarConflitoAgendamento({ barbeiroId, data, horario }, ignorarId = nu
     .get(barbeiroId, data, horario);
 }
 
+// Dia inteiro (horario NULL) ou o horário específico bloqueado pelo barbeiro.
+function slotBloqueado(barbeiroId, data, horario) {
+  return db
+    .prepare(
+      "SELECT * FROM barbeiro_bloqueios WHERE barbeiro_id = ? AND data = ? AND (horario IS NULL OR horario = ?)"
+    )
+    .get(barbeiroId, data, horario);
+}
+
+// ---------- Login ----------
+
+app.post("/barbeiros/login", (req, res) => {
+  const { errors, valido, data } = validarCredenciaisLogin(req.body);
+  if (!valido) return res.status(400).json({ erros: errors });
+
+  const barbeiro = db.prepare("SELECT * FROM barbeiros WHERE usuario = ?").get(data.usuario);
+
+  // Mensagem genérica de propósito — não revela se foi o usuário ou a senha.
+  if (!barbeiro || !verificarSenha(data.senha, barbeiro.senha_hash)) {
+    return res.status(401).json({ erro: "Usuário ou senha inválidos." });
+  }
+
+  const { token, expiraEm } = criarSessao(barbeiro.id);
+  res.json({
+    token,
+    expiraEm,
+    barbeiro: { id: barbeiro.id, nome: barbeiro.nome, usuario: barbeiro.usuario },
+  });
+});
+
+app.post("/barbeiros/logout", (req, res) => {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (token) removerSessao(token);
+  res.status(204).send();
+});
+
+// Define ou troca usuário+senha de um barbeiro. Primeira configuração é
+// aberta (o barbeiro ainda não tem como se autenticar); depois de
+// configurado, só o próprio dono (autenticado) pode trocar.
+app.put("/barbeiros/:id/login", (req, res) => {
+  const id = Number(req.params.id);
+  const barbeiro = db.prepare("SELECT * FROM barbeiros WHERE id = ?").get(id);
+  if (!barbeiro) return res.status(404).json({ erro: "Barbeiro não encontrado." });
+
+  if (barbeiro.usuario) {
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+    const autenticado = resolverToken(token);
+    if (!autenticado || autenticado.id !== id) {
+      return res.status(403).json({ erro: "Faça login como esse barbeiro pra trocar as credenciais." });
+    }
+  }
+
+  const { errors, valido, data } = validarDefinicaoLogin(req.body);
+  if (!valido) return res.status(400).json({ erros: errors });
+
+  const usuarioEmUso = db
+    .prepare("SELECT id FROM barbeiros WHERE usuario = ? AND id != ?")
+    .get(data.usuario, id);
+  if (usuarioEmUso) return res.status(409).json({ erro: "Esse nome de usuário já está em uso." });
+
+  db.prepare("UPDATE barbeiros SET usuario = ?, senha_hash = ? WHERE id = ?").run(
+    data.usuario,
+    hashSenha(data.senha),
+    id
+  );
+
+  res.json({ id: barbeiro.id, nome: barbeiro.nome, usuario: data.usuario });
+});
+
 // ---------- Barbeiros ----------
 
 app.get("/barbeiros", (req, res) => {
-  const barbeiros = db.prepare("SELECT * FROM barbeiros ORDER BY nome").all();
+  // Nunca expõe usuario/senha_hash na listagem pública.
+  const barbeiros = db
+    .prepare("SELECT id, nome, ativo, criado_em, (usuario IS NOT NULL) AS tem_login FROM barbeiros ORDER BY nome")
+    .all();
   res.json(barbeiros);
 });
 
@@ -70,7 +165,9 @@ app.post("/barbeiros", (req, res) => {
   if (!valido) return res.status(400).json({ erros: errors });
 
   const info = db.prepare("INSERT INTO barbeiros (nome) VALUES (?)").run(data.nome);
-  const barbeiro = db.prepare("SELECT * FROM barbeiros WHERE id = ?").get(info.lastInsertRowid);
+  const barbeiro = db
+    .prepare("SELECT id, nome, ativo, criado_em FROM barbeiros WHERE id = ?")
+    .get(info.lastInsertRowid);
   res.status(201).json(barbeiro);
 });
 
@@ -87,7 +184,9 @@ app.put("/barbeiros/:id", (req, res) => {
   }
 
   db.prepare("UPDATE barbeiros SET nome = ?, ativo = ? WHERE id = ?").run(nome, ativo, id);
-  res.json(db.prepare("SELECT * FROM barbeiros WHERE id = ?").get(id));
+  res.json(
+    db.prepare("SELECT id, nome, ativo, criado_em FROM barbeiros WHERE id = ?").get(id)
+  );
 });
 
 app.delete("/barbeiros/:id", (req, res) => {
@@ -104,7 +203,7 @@ app.delete("/barbeiros/:id", (req, res) => {
     db.prepare("UPDATE barbeiros SET ativo = 0 WHERE id = ?").run(id);
     return res.status(200).json({
       aviso: "Barbeiro tem agendamentos/atendimentos no histórico — foi desativado em vez de excluído.",
-      barbeiro: db.prepare("SELECT * FROM barbeiros WHERE id = ?").get(id),
+      barbeiro: db.prepare("SELECT id, nome, ativo, criado_em FROM barbeiros WHERE id = ?").get(id),
     });
   }
 
@@ -112,11 +211,180 @@ app.delete("/barbeiros/:id", (req, res) => {
   res.status(204).send();
 });
 
-// ---------- Catálogo (serviços e produtos) ----------
+// ---------- Catálogo (serviços do barbeiro + produtos compartilhados) ----------
 
 app.get("/catalogo", (req, res) => {
-  const itens = db.prepare("SELECT * FROM catalogo_itens WHERE ativo = 1 ORDER BY tipo, nome").all();
+  const { barbeiroId } = req.query;
+
+  const itens = barbeiroId
+    ? db
+        .prepare(
+          `SELECT * FROM catalogo_itens
+           WHERE ativo = 1 AND (tipo = 'produto' OR barbeiro_id = ?)
+           ORDER BY tipo, nome`
+        )
+        .all(Number(barbeiroId))
+    : db.prepare("SELECT * FROM catalogo_itens WHERE ativo = 1 AND tipo = 'produto' ORDER BY nome").all();
+
   res.json(itens);
+});
+
+// -- Serviços (por barbeiro; só o próprio dono gerencia) --
+
+app.post("/barbeiros/:id/servicos", autenticar, (req, res) => {
+  const barbeiroId = Number(req.params.id);
+  if (barrarSeNaoForDono(req, res, barbeiroId)) return;
+
+  const { errors, valido, data } = validarServico(req.body);
+  if (!valido) return res.status(400).json({ erros: errors });
+
+  const duplicado = db
+    .prepare("SELECT id FROM catalogo_itens WHERE tipo = 'servico' AND barbeiro_id = ? AND nome = ?")
+    .get(barbeiroId, data.nome);
+  if (duplicado) return res.status(409).json({ erro: "Você já tem um serviço com esse nome." });
+
+  const info = db
+    .prepare(
+      "INSERT INTO catalogo_itens (nome, tipo, preco, barbeiro_id) VALUES (?, 'servico', ?, ?)"
+    )
+    .run(data.nome, data.preco, barbeiroId);
+
+  res.status(201).json(db.prepare("SELECT * FROM catalogo_itens WHERE id = ?").get(info.lastInsertRowid));
+});
+
+app.put("/barbeiros/:id/servicos/:itemId", autenticar, (req, res) => {
+  const barbeiroId = Number(req.params.id);
+  if (barrarSeNaoForDono(req, res, barbeiroId)) return;
+
+  const item = db
+    .prepare("SELECT * FROM catalogo_itens WHERE id = ? AND tipo = 'servico' AND barbeiro_id = ?")
+    .get(Number(req.params.itemId), barbeiroId);
+  if (!item) return res.status(404).json({ erro: "Serviço não encontrado." });
+
+  const { errors, valido, data } = validarServico(req.body);
+  if (!valido) return res.status(400).json({ erros: errors });
+
+  const ativo = req.body.ativo !== undefined ? (req.body.ativo ? 1 : 0) : item.ativo;
+
+  db.prepare("UPDATE catalogo_itens SET nome = ?, preco = ?, ativo = ? WHERE id = ?").run(
+    data.nome,
+    data.preco,
+    ativo,
+    item.id
+  );
+
+  res.json(db.prepare("SELECT * FROM catalogo_itens WHERE id = ?").get(item.id));
+});
+
+app.delete("/barbeiros/:id/servicos/:itemId", autenticar, (req, res) => {
+  const barbeiroId = Number(req.params.id);
+  if (barrarSeNaoForDono(req, res, barbeiroId)) return;
+
+  const item = db
+    .prepare("SELECT * FROM catalogo_itens WHERE id = ? AND tipo = 'servico' AND barbeiro_id = ?")
+    .get(Number(req.params.itemId), barbeiroId);
+  if (!item) return res.status(404).json({ erro: "Serviço não encontrado." });
+
+  db.prepare("DELETE FROM catalogo_itens WHERE id = ?").run(item.id);
+  res.status(204).send();
+});
+
+// -- Produtos (compartilhados; qualquer barbeiro autenticado gerencia —
+// sem conceito de admin ainda, ver plano/observação no código) --
+
+app.post("/produtos", autenticar, (req, res) => {
+  const { errors, valido, data } = validarProduto(req.body);
+  if (!valido) return res.status(400).json({ erros: errors });
+
+  const duplicado = db
+    .prepare("SELECT id FROM catalogo_itens WHERE tipo = 'produto' AND nome = ?")
+    .get(data.nome);
+  if (duplicado) return res.status(409).json({ erro: "Já existe um produto com esse nome." });
+
+  const info = db
+    .prepare(
+      "INSERT INTO catalogo_itens (nome, tipo, preco, barbeiro_id, estoque) VALUES (?, 'produto', ?, NULL, ?)"
+    )
+    .run(data.nome, data.preco, data.estoque);
+
+  res.status(201).json(db.prepare("SELECT * FROM catalogo_itens WHERE id = ?").get(info.lastInsertRowid));
+});
+
+app.put("/produtos/:itemId", autenticar, (req, res) => {
+  const item = db
+    .prepare("SELECT * FROM catalogo_itens WHERE id = ? AND tipo = 'produto'")
+    .get(Number(req.params.itemId));
+  if (!item) return res.status(404).json({ erro: "Produto não encontrado." });
+
+  const { errors, valido, data } = validarProduto(req.body);
+  if (!valido) return res.status(400).json({ erros: errors });
+
+  const ativo = req.body.ativo !== undefined ? (req.body.ativo ? 1 : 0) : item.ativo;
+
+  db.prepare("UPDATE catalogo_itens SET nome = ?, preco = ?, estoque = ?, ativo = ? WHERE id = ?").run(
+    data.nome,
+    data.preco,
+    data.estoque,
+    ativo,
+    item.id
+  );
+
+  res.json(db.prepare("SELECT * FROM catalogo_itens WHERE id = ?").get(item.id));
+});
+
+app.delete("/produtos/:itemId", autenticar, (req, res) => {
+  const item = db
+    .prepare("SELECT * FROM catalogo_itens WHERE id = ? AND tipo = 'produto'")
+    .get(Number(req.params.itemId));
+  if (!item) return res.status(404).json({ erro: "Produto não encontrado." });
+
+  db.prepare("DELETE FROM catalogo_itens WHERE id = ?").run(item.id);
+  res.status(204).send();
+});
+
+// ---------- Bloqueios de agenda (folga / horário indisponível) ----------
+
+app.get("/barbeiros/:id/bloqueios", (req, res) => {
+  const barbeiroId = Number(req.params.id);
+  const { data } = req.query;
+
+  const bloqueios = data
+    ? db.prepare("SELECT * FROM barbeiro_bloqueios WHERE barbeiro_id = ? AND data = ?").all(barbeiroId, data)
+    : db.prepare("SELECT * FROM barbeiro_bloqueios WHERE barbeiro_id = ? ORDER BY data").all(barbeiroId);
+
+  res.json(bloqueios);
+});
+
+app.post("/barbeiros/:id/bloqueios", autenticar, (req, res) => {
+  const barbeiroId = Number(req.params.id);
+  if (barrarSeNaoForDono(req, res, barbeiroId)) return;
+
+  const { errors, valido, data } = validarBloqueio(req.body);
+  if (!valido) return res.status(400).json({ erros: errors });
+
+  const jaBloqueado = slotBloqueado(barbeiroId, data.data, data.horario);
+  if (jaBloqueado) {
+    return res.status(409).json({ erro: "Esse dia/horário já está bloqueado." });
+  }
+
+  const info = db
+    .prepare("INSERT INTO barbeiro_bloqueios (barbeiro_id, data, horario) VALUES (?, ?, ?)")
+    .run(barbeiroId, data.data, data.horario);
+
+  res.status(201).json(db.prepare("SELECT * FROM barbeiro_bloqueios WHERE id = ?").get(info.lastInsertRowid));
+});
+
+app.delete("/barbeiros/:id/bloqueios/:bloqueioId", autenticar, (req, res) => {
+  const barbeiroId = Number(req.params.id);
+  if (barrarSeNaoForDono(req, res, barbeiroId)) return;
+
+  const bloqueio = db
+    .prepare("SELECT * FROM barbeiro_bloqueios WHERE id = ? AND barbeiro_id = ?")
+    .get(Number(req.params.bloqueioId), barbeiroId);
+  if (!bloqueio) return res.status(404).json({ erro: "Bloqueio não encontrado." });
+
+  db.prepare("DELETE FROM barbeiro_bloqueios WHERE id = ?").run(bloqueio.id);
+  res.status(204).send();
 });
 
 // ---------- Clientes ----------
@@ -194,11 +462,16 @@ app.get("/agendamentos", (req, res) => {
 });
 
 app.post("/agendamentos", (req, res) => {
-  const { errors, valido, data } = validarAgendamento(req.body, servicosAtivos());
+  const barbeiroId = Number(req.body?.barbeiroId);
+  const { errors, valido, data } = validarAgendamento(req.body, servicosAtivosDoBarbeiro(barbeiroId));
   if (!valido) return res.status(400).json({ erros: errors });
 
   const barbeiro = db.prepare("SELECT * FROM barbeiros WHERE id = ?").get(data.barbeiroId);
   if (!barbeiro) return res.status(400).json({ erros: ["Barbeiro não encontrado."] });
+
+  if (slotBloqueado(data.barbeiroId, data.data, data.horario)) {
+    return res.status(409).json({ erro: `${barbeiro.nome} não atende nesse dia/horário.` });
+  }
 
   const conflito = buscarConflitoAgendamento(data);
   if (conflito) {
@@ -221,19 +494,25 @@ app.post("/agendamentos", (req, res) => {
     .json(db.prepare("SELECT * FROM agendamentos WHERE id = ?").get(info.lastInsertRowid));
 });
 
-app.put("/agendamentos/:id", (req, res) => {
+app.put("/agendamentos/:id", autenticar, (req, res) => {
   const id = Number(req.params.id);
   const existente = db.prepare("SELECT * FROM agendamentos WHERE id = ?").get(id);
   if (!existente) return res.status(404).json({ erro: "Agendamento não encontrado." });
+  if (barrarSeNaoForDono(req, res, existente.barbeiro_id)) return;
   if (existente.status === "concluido") {
     return res.status(409).json({ erro: "Atendimento já concluído não pode ser alterado." });
   }
 
-  const { errors, valido, data } = validarAgendamento(req.body, servicosAtivos());
+  const barbeiroId = Number(req.body?.barbeiroId);
+  const { errors, valido, data } = validarAgendamento(req.body, servicosAtivosDoBarbeiro(barbeiroId));
   if (!valido) return res.status(400).json({ erros: errors });
 
   const barbeiro = db.prepare("SELECT * FROM barbeiros WHERE id = ?").get(data.barbeiroId);
   if (!barbeiro) return res.status(400).json({ erros: ["Barbeiro não encontrado."] });
+
+  if (slotBloqueado(data.barbeiroId, data.data, data.horario)) {
+    return res.status(409).json({ erro: `${barbeiro.nome} não atende nesse dia/horário.` });
+  }
 
   const conflito = buscarConflitoAgendamento(data, id);
   if (conflito) {
@@ -254,10 +533,11 @@ app.put("/agendamentos/:id", (req, res) => {
   res.json(db.prepare("SELECT * FROM agendamentos WHERE id = ?").get(id));
 });
 
-app.delete("/agendamentos/:id", (req, res) => {
+app.delete("/agendamentos/:id", autenticar, (req, res) => {
   const id = Number(req.params.id);
   const existente = db.prepare("SELECT * FROM agendamentos WHERE id = ?").get(id);
   if (!existente) return res.status(404).json({ erro: "Agendamento não encontrado." });
+  if (barrarSeNaoForDono(req, res, existente.barbeiro_id)) return;
   if (existente.status === "concluido") {
     return res.status(409).json({ erro: "Atendimento já concluído não pode ser cancelado." });
   }
@@ -304,7 +584,7 @@ app.get("/vendas", (req, res) => {
   res.json(vendasComItens);
 });
 
-app.post("/vendas", (req, res) => {
+app.post("/vendas", autenticar, (req, res) => {
   const agendamento = db
     .prepare("SELECT * FROM agendamentos WHERE id = ?")
     .get(Number(req.body?.agendamentoId));
@@ -312,12 +592,23 @@ app.post("/vendas", (req, res) => {
   if (!agendamento) {
     return res.status(404).json({ erro: "Agendamento não encontrado." });
   }
+  if (barrarSeNaoForDono(req, res, agendamento.barbeiro_id)) return;
   if (agendamento.status === "concluido") {
     return res.status(409).json({ erro: "Este atendimento já foi finalizado." });
   }
 
-  const { errors, valido, data } = validarVenda(req.body, catalogoAtivoMap());
+  const catalogoMap = catalogoAtivoMap(agendamento.barbeiro_id);
+  const { errors, valido, data } = validarVenda(req.body, catalogoMap);
   if (!valido) return res.status(400).json({ erros: errors });
+
+  const semEstoque = data.itens.filter(
+    (item) => item.tipo === "produto" && catalogoMap.get(item.descricao).estoque < item.quantidade
+  );
+  if (semEstoque.length > 0) {
+    return res.status(409).json({
+      erro: `Estoque insuficiente: ${semEstoque.map((i) => i.descricao).join(", ")}.`,
+    });
+  }
 
   try {
     db.exec("BEGIN");
@@ -341,8 +632,15 @@ app.post("/vendas", (req, res) => {
     const inserirItem = db.prepare(
       "INSERT INTO venda_itens (venda_id, descricao, tipo, preco, quantidade) VALUES (?, ?, ?, ?, ?)"
     );
+    const baixarEstoque = db.prepare(
+      "UPDATE catalogo_itens SET estoque = estoque - ? WHERE id = ?"
+    );
+
     for (const item of data.itens) {
       inserirItem.run(vendaId, item.descricao, item.tipo, item.preco, item.quantidade);
+      if (item.tipo === "produto") {
+        baixarEstoque.run(item.quantidade, item.id);
+      }
     }
 
     db.prepare(

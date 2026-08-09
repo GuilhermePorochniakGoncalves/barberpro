@@ -51,8 +51,14 @@ function validarAgendamento(body = {}, servicosValidos = []) {
 
   if (!servico) {
     errors.push("Serviço é obrigatório.");
-  } else if (servicosValidos.length > 0 && !servicosValidos.includes(servico)) {
-    errors.push(`Serviço inválido. Opções válidas: ${servicosValidos.join(", ")}.`);
+  } else if (!servicosValidos.includes(servico)) {
+    // Lista vazia (barbeiro sem nenhum serviço cadastrado) também cai aqui —
+    // corretamente rejeita, em vez de aceitar qualquer nome sem checar.
+    errors.push(
+      servicosValidos.length > 0
+        ? `Serviço inválido. Opções válidas: ${servicosValidos.join(", ")}.`
+        : "Esse barbeiro ainda não tem nenhum serviço cadastrado."
+    );
   }
 
   if (!dataValida(data)) {
@@ -142,6 +148,7 @@ function validarVenda(body = {}, itensValidos = new Map()) {
     }
 
     itens.push({
+      id: catalogado.id,
       descricao: nome,
       tipo: catalogado.tipo,
       preco: catalogado.preco,
@@ -158,6 +165,77 @@ function validarVenda(body = {}, itensValidos = new Map()) {
   };
 }
 
+// Login (usuário + senha) pra entrar. Usado em POST /barbeiros/login.
+function validarCredenciaisLogin(body = {}) {
+  const errors = [];
+
+  const usuario = String(body.usuario ?? "").trim();
+  const senha = String(body.senha ?? "");
+
+  if (!usuario) errors.push("Usuário é obrigatório.");
+  if (!senha) errors.push("Senha é obrigatória.");
+
+  return { errors, valido: errors.length === 0, data: { usuario, senha } };
+}
+
+// Definir/trocar usuário+senha de um barbeiro. Usado em PUT /barbeiros/:id/login.
+function validarDefinicaoLogin(body = {}) {
+  const errors = [];
+
+  const usuario = String(body.usuario ?? "").trim();
+  const senha = String(body.senha ?? "");
+
+  if (usuario.length < 3) errors.push("Usuário precisa ter ao menos 3 caracteres.");
+  else if (!/^[a-zA-Z0-9._-]+$/.test(usuario)) {
+    errors.push("Usuário só pode ter letras, números, ponto, hífen e underscore.");
+  }
+  if (senha.length < 6) errors.push("Senha precisa ter ao menos 6 caracteres.");
+
+  return { errors, valido: errors.length === 0, data: { usuario, senha } };
+}
+
+function validarServico(body = {}) {
+  const errors = [];
+
+  const nome = String(body.nome ?? "").trim();
+  const preco = Number(body.preco);
+
+  if (!nome) errors.push("Nome do serviço é obrigatório.");
+  if (!Number.isFinite(preco) || preco <= 0) errors.push("Preço inválido.");
+
+  return { errors, valido: errors.length === 0, data: { nome, preco } };
+}
+
+function validarProduto(body = {}) {
+  const errors = [];
+
+  const nome = String(body.nome ?? "").trim();
+  const preco = Number(body.preco);
+  const estoque = Number(body.estoque);
+
+  if (!nome) errors.push("Nome do produto é obrigatório.");
+  if (!Number.isFinite(preco) || preco <= 0) errors.push("Preço inválido.");
+  if (!Number.isInteger(estoque) || estoque < 0) errors.push("Estoque inválido.");
+
+  return { errors, valido: errors.length === 0, data: { nome, preco, estoque } };
+}
+
+// `horario` é opcional: ausente/null bloqueia o dia inteiro.
+function validarBloqueio(body = {}) {
+  const errors = [];
+
+  const data = String(body.data ?? "").trim();
+  const horarioBruto = body.horario;
+  const horario = horarioBruto ? String(horarioBruto).trim() : null;
+
+  if (!dataValida(data)) errors.push("Data inválida. Use o formato AAAA-MM-DD.");
+  if (horario && !HORARIOS_VALIDOS.includes(horario)) {
+    errors.push(`Horário inválido. Opções válidas: ${HORARIOS_VALIDOS.join(", ")}.`);
+  }
+
+  return { errors, valido: errors.length === 0, data: { data, horario } };
+}
+
 module.exports = {
   HORARIOS_VALIDOS,
   FORMAS_PAGAMENTO_VALIDAS,
@@ -166,4 +244,9 @@ module.exports = {
   validarCliente,
   validarBarbeiro,
   validarVenda,
+  validarCredenciaisLogin,
+  validarDefinicaoLogin,
+  validarServico,
+  validarProduto,
+  validarBloqueio,
 };
