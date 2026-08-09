@@ -1,17 +1,17 @@
 import AppRoutes from "./routes";
 import { BarberProvider } from "./context/BarberContext";
 import { BarbeirosProvider } from "./context/BarbeirosContext";
-import { AuthProvider } from "./context/AuthContext";
+import { ToastProvider } from "./context/ToastContext";
 
 function App() {
   return (
-    <AuthProvider>
+    <ToastProvider>
       <BarbeirosProvider>
         <BarberProvider>
           <AppRoutes />
         </BarberProvider>
       </BarbeirosProvider>
-    </AuthProvider>
+    </ToastProvider>
   );
 }
 

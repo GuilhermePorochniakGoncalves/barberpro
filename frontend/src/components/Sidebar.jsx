@@ -1,29 +1,15 @@
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/useAuth";
+import { Link, useLocation } from "react-router-dom";
 
 function Sidebar() {
   const location = useLocation();
-  const navigate = useNavigate();
-  const { barbeiroLogado, logout } = useAuth();
 
   const menus = [
     { nome: "Dashboard", caminho: "/" },
     { nome: "Barbeiros", caminho: "/barbeiros" },
+    { nome: "Produtos", caminho: "/produtos" },
     { nome: "Clientes", caminho: "/clientes" },
     { nome: "Relatórios", caminho: "/relatorios" },
   ];
-
-  // Só aparecem pra quem está logado (a rota também é protegida — isso é
-  // só pra não oferecer um link que vai barrar em seguida).
-  const menusLogado = [
-    { nome: "Meus serviços", caminho: "/meus-servicos" },
-    { nome: "Produtos", caminho: "/produtos" },
-  ];
-
-  async function sair() {
-    await logout();
-    navigate("/");
-  }
 
   return (
     <div className="w-64 bg-black border-r border-zinc-900 text-zinc-100 min-h-screen p-6 flex flex-col">
@@ -32,7 +18,7 @@ function Sidebar() {
       </h1>
 
       <nav className="space-y-2 flex-1">
-        {[...menus, ...(barbeiroLogado ? menusLogado : [])].map((menu) => {
+        {menus.map((menu) => {
           const ativo =
             menu.caminho === "/"
               ? location.pathname === "/"
@@ -53,27 +39,6 @@ function Sidebar() {
           );
         })}
       </nav>
-
-      <div className="border-t border-zinc-900 pt-4">
-        {barbeiroLogado ? (
-          <div className="space-y-2">
-            <p className="px-4 text-sm text-zinc-500">Logado como {barbeiroLogado.nome}</p>
-            <button
-              onClick={sair}
-              className="w-full text-left px-4 py-3 rounded-xl hover:bg-zinc-900 text-zinc-300"
-            >
-              Sair
-            </button>
-          </div>
-        ) : (
-          <Link
-            to="/login"
-            className="block px-4 py-3 rounded-xl hover:bg-zinc-900 text-zinc-300"
-          >
-            Login do barbeiro
-          </Link>
-        )}
-      </div>
     </div>
   );
 }

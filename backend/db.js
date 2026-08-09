@@ -23,20 +23,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL,
     ativo INTEGER NOT NULL DEFAULT 1,
-    usuario TEXT UNIQUE,
-    senha_hash TEXT,
     criado_em TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-`);
-
-// Sessões de login — token opaco simples (sem refresh token). Uma linha por
-// login ativo; login de novo gera outro token (múltiplas sessões possíveis).
-db.exec(`
-  CREATE TABLE IF NOT EXISTS sessoes (
-    token TEXT PRIMARY KEY,
-    barbeiro_id INTEGER NOT NULL REFERENCES barbeiros(id),
-    criado_em TEXT NOT NULL DEFAULT (datetime('now')),
-    expira_em TEXT NOT NULL
   );
 `);
 

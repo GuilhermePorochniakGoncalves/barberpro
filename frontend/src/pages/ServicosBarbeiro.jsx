@@ -1,19 +1,27 @@
 import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../components/Layout";
 import EmptyState from "../components/EmptyState";
 import { SkeletonTableRows } from "../components/Skeleton";
+import { useConfirm } from "../hooks/useConfirm";
 import api from "../services/api";
-import { useAuth } from "../context/useAuth";
+import { useBarbeiros } from "../context/useBarbeiros";
 import { extrairMensagemErro } from "../utils/erro";
 
 function formatarReais(valor) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-// Cada barbeiro cadastra/edita os próprios serviços (nome + preço) — usados
-// tanto no agendamento quanto na tela de finalizar atendimento.
-function MeusServicos() {
-  const { barbeiroLogado } = useAuth();
+// Serviços de um barbeiro específico (nome + preço) — acessível a partir
+// da agenda dele, gerenciável por qualquer um (sem conta/login: na
+// barbearia, qualquer barbeiro/recepção cobre a agenda de outro).
+function ServicosBarbeiro() {
+  const { id } = useParams();
+  const barbeiroId = Number(id);
+  const navigate = useNavigate();
+  const { barbeiros } = useBarbeiros();
+  const barbeiro = barbeiros.find((b) => b.id === barbeiroId);
+  const { confirmar, modal } = useConfirm();
 
   const [servicos, setServicos] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -29,16 +37,16 @@ function MeusServicos() {
   useEffect(() => {
     carregarServicos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [barbeiroId]);
 
   async function carregarServicos() {
     setCarregando(true);
     setErro(null);
     try {
-      const response = await api.get("/catalogo", { params: { barbeiroId: barbeiroLogado.id } });
+      const response = await api.get("/catalogo", { params: { barbeiroId } });
       setServicos(response.data.filter((i) => i.tipo === "servico"));
     } catch (error) {
-      setErro(extrairMensagemErro(error, "Não foi possível carregar seus serviços."));
+      setErro(extrairMensagemErro(error, "Não foi possível carregar os serviços."));
     } finally {
       setCarregando(false);
     }
@@ -74,7 +82,7 @@ function MeusServicos() {
       return;
     }
     if (!Number.isFinite(precoNumero) || precoNumero <= 0) {
-      setErroForm("Informe um preço válido.");
+      setErroForm("Informe um preço válido (maior que zero).");
       return;
     }
 
@@ -82,12 +90,12 @@ function MeusServicos() {
     setSalvando(true);
     try {
       if (editandoId) {
-        await api.put(`/barbeiros/${barbeiroLogado.id}/servicos/${editandoId}`, {
+        await api.put(`/barbeiros/${barbeiroId}/servicos/${editandoId}`, {
           nome: nome.trim(),
           preco: precoNumero,
         });
       } else {
-        await api.post(`/barbeiros/${barbeiroLogado.id}/servicos`, {
+        await api.post(`/barbeiros/${barbeiroId}/servicos`, {
           nome: nome.trim(),
           preco: precoNumero,
         });
@@ -102,12 +110,16 @@ function MeusServicos() {
   }
 
   async function remover(servico) {
-    const confirmado = window.confirm(`Remover o serviço "${servico.nome}"?`);
-    if (!confirmado) return;
+    const ok = await confirmar({
+      titulo: "Remover serviço",
+      mensagem: `Remover o serviço "${servico.nome}"? Essa ação não pode ser desfeita.`,
+      confirmarLabel: "Remover",
+    });
+    if (!ok) return;
 
     setErro(null);
     try {
-      await api.delete(`/barbeiros/${barbeiroLogado.id}/servicos/${servico.id}`);
+      await api.delete(`/barbeiros/${barbeiroId}/servicos/${servico.id}`);
       await carregarServicos();
     } catch (error) {
       setErro(extrairMensagemErro(error, "Não foi possível remover o serviço."));
@@ -116,10 +128,22 @@ function MeusServicos() {
 
   return (
     <Layout>
+      <div className="flex items-center gap-3 mb-1">
+        <button
+          onClick={() => navigate(`/barbeiros/${barbeiroId}`)}
+          className="text-zinc-500 hover:text-zinc-300"
+          aria-label="Voltar pra agenda"
+        >
+          ← Agenda
+        </button>
+      </div>
+
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-white">Meus serviços</h1>
-          <p className="text-zinc-400 mt-1">Serviços que você oferece, com seus preços.</p>
+          <h1 className="text-3xl font-bold text-white">
+            Serviços {barbeiro ? `de ${barbeiro.nome}` : ""}
+          </h1>
+          <p className="text-zinc-400 mt-1">Serviços oferecidos, com preço.</p>
         </div>
 
         <button
@@ -193,7 +217,7 @@ function MeusServicos() {
                   <EmptyState
                     icon="📋"
                     title="Nenhum serviço cadastrado"
-                    description="Cadastre os serviços que você oferece, com preço, pra poder usá-los nos agendamentos."
+                    description="Cadastre os serviços oferecidos por esse barbeiro, com preço, pra poder usá-los nos agendamentos."
                     actionLabel="Novo serviço"
                     onAction={abrirNovo}
                   />
@@ -218,8 +242,10 @@ function MeusServicos() {
           </tbody>
         </table>
       </div>
+
+      {modal}
     </Layout>
   );
 }
 
-export default MeusServicos;
+export default ServicosBarbeiro;

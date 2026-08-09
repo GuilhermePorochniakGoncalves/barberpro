@@ -1,27 +1,26 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../components/Layout";
 import AppointmentModal from "../components/AppointmentModal";
 import FinalizarAtendimentoModal from "../components/FinalizarAtendimentoModal";
 import { SkeletonList } from "../components/Skeleton";
 import api from "../services/api";
 import { useBarbeiros } from "../context/useBarbeiros";
-import { useAuth } from "../context/useAuth";
 import { HORARIOS } from "../constants/schedule";
 import { adicionarDias, ehHoje, formatarDataExibicao, hojeISO } from "../utils/date";
 import { extrairMensagemErro } from "../utils/erro";
 import { iniciais, corAvatar } from "../utils/avatar";
 
+// Sem login: qualquer um (recepção, outro barbeiro cobrindo) gerencia a
+// agenda de qualquer barbeiro — reflete como a barbearia funciona na
+// prática (um barbeiro livre atende o cliente de outro que está ocupado).
 function BarbeiroAgenda() {
   const { id } = useParams();
   const barbeiroId = Number(id);
   const navigate = useNavigate();
-  const location = useLocation();
 
-  const { barbeiros, carregando: carregandoBarbeiros, recarregar: recarregarBarbeiros } = useBarbeiros();
-  const { barbeiroLogado, login } = useAuth();
+  const { barbeiros, carregando: carregandoBarbeiros } = useBarbeiros();
   const barbeiro = barbeiros.find((b) => b.id === barbeiroId);
-  const souDono = barbeiroLogado?.id === barbeiroId;
 
   const [dataSelecionada, setDataSelecionada] = useState(hojeISO());
   const [agendamentos, setAgendamentos] = useState([]);
@@ -37,14 +36,6 @@ function BarbeiroAgenda() {
 
   const [pagamentoOpen, setPagamentoOpen] = useState(false);
   const [agendamentoParaFinalizar, setAgendamentoParaFinalizar] = useState(null);
-
-  // Formulário de "configurar meu login" (só aparece se o barbeiro ainda
-  // não tem usuário/senha definidos).
-  const [configurandoLogin, setConfigurandoLogin] = useState(false);
-  const [novoUsuario, setNovoUsuario] = useState("");
-  const [novaSenha, setNovaSenha] = useState("");
-  const [erroLogin, setErroLogin] = useState("");
-  const [salvandoLogin, setSalvandoLogin] = useState(false);
 
   useEffect(() => {
     carregarAgenda();
@@ -163,31 +154,6 @@ function BarbeiroAgenda() {
     }
   }
 
-  async function configurarLogin(e) {
-    e.preventDefault();
-    if (novoUsuario.trim().length < 3 || novaSenha.length < 6) {
-      setErroLogin("Usuário precisa ter 3+ caracteres e senha 6+ caracteres.");
-      return;
-    }
-
-    setErroLogin("");
-    setSalvandoLogin(true);
-    try {
-      await api.put(`/barbeiros/${barbeiroId}/login`, { usuario: novoUsuario.trim(), senha: novaSenha });
-      const resultado = await login(novoUsuario.trim(), novaSenha);
-      if (!resultado.sucesso) throw new Error(resultado.mensagem);
-
-      await recarregarBarbeiros();
-      setConfigurandoLogin(false);
-      setNovoUsuario("");
-      setNovaSenha("");
-    } catch (error) {
-      setErroLogin(error.message || extrairMensagemErro(error, "Não foi possível configurar o login."));
-    } finally {
-      setSalvandoLogin(false);
-    }
-  }
-
   if (!carregandoBarbeiros && !barbeiro) {
     return (
       <Layout>
@@ -227,71 +193,13 @@ function BarbeiroAgenda() {
           )}
         </div>
 
-        {barbeiro && !souDono && barbeiro.tem_login ? (
-          <button
-            onClick={() => navigate("/login", { state: { from: location.pathname } })}
-            className="text-sm text-amber-500 hover:text-amber-400"
-          >
-            Entrar como {barbeiro.nome}
-          </button>
-        ) : null}
+        <button
+          onClick={() => navigate(`/barbeiros/${barbeiroId}/servicos`)}
+          className="text-sm text-amber-500 hover:text-amber-400"
+        >
+          Gerenciar serviços
+        </button>
       </div>
-
-      {barbeiro && !barbeiro.tem_login && (
-        <div className="bg-zinc-900 rounded-2xl p-6 mb-6 border-2 border-dashed border-amber-700/50">
-          {!configurandoLogin ? (
-            <div className="flex items-center justify-between">
-              <p className="text-zinc-400">
-                {barbeiro.nome} ainda não tem login configurado.
-              </p>
-              <button
-                onClick={() => setConfigurandoLogin(true)}
-                className="text-amber-500 font-medium hover:text-amber-400"
-              >
-                Configurar login
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={configurarLogin}>
-              <h2 className="font-bold text-lg mb-3 text-zinc-100">Configurar login de {barbeiro.nome}</h2>
-              <div className="flex flex-wrap gap-3">
-                <input
-                  type="text"
-                  placeholder="Usuário"
-                  value={novoUsuario}
-                  onChange={(e) => setNovoUsuario(e.target.value)}
-                  className="flex-1 min-w-[160px] bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-zinc-100 placeholder:text-zinc-500"
-                  disabled={salvandoLogin}
-                />
-                <input
-                  type="password"
-                  placeholder="Senha (6+ caracteres)"
-                  value={novaSenha}
-                  onChange={(e) => setNovaSenha(e.target.value)}
-                  className="flex-1 min-w-[160px] bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-zinc-100 placeholder:text-zinc-500"
-                  disabled={salvandoLogin}
-                />
-                <button
-                  type="submit"
-                  disabled={salvandoLogin}
-                  className="px-4 py-2 bg-amber-600 text-black font-semibold rounded-lg hover:bg-amber-700 disabled:opacity-50"
-                >
-                  {salvandoLogin ? "Salvando..." : "Salvar e entrar"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfigurandoLogin(false)}
-                  disabled={salvandoLogin}
-                  className="px-4 py-2 border border-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-800"
-                >
-                  Cancelar
-                </button>
-              </div>
-              {erroLogin && <p className="text-red-400 text-sm mt-2">{erroLogin}</p>}
-            </form>
-          )}
-        </div>
-      )}
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
@@ -326,18 +234,16 @@ function BarbeiroAgenda() {
           </div>
 
           <div className="flex gap-3">
-            {souDono && (
-              <button
-                onClick={alternarBloqueioDia}
-                className={`px-4 py-2 rounded-lg border text-sm ${
-                  diaInteiroBloqueado
-                    ? "border-red-900/50 text-red-400 hover:bg-red-950/30"
-                    : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-                }`}
-              >
-                {diaInteiroBloqueado ? "Remover folga do dia" : "Marcar folga (dia inteiro)"}
-              </button>
-            )}
+            <button
+              onClick={alternarBloqueioDia}
+              className={`px-4 py-2 rounded-lg border text-sm ${
+                diaInteiroBloqueado
+                  ? "border-red-900/50 text-red-400 hover:bg-red-950/30"
+                  : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              }`}
+            >
+              {diaInteiroBloqueado ? "Remover folga do dia" : "Marcar folga (dia inteiro)"}
+            </button>
 
             <button
               onClick={abrirModalNovo}
@@ -394,22 +300,18 @@ function BarbeiroAgenda() {
                         <span className="text-sm text-zinc-500 px-3 py-2">Concluído ✓</span>
                       ) : (
                         <div className="flex gap-2">
-                          {souDono && (
-                            <>
-                              <button
-                                onClick={() => abrirModalSlot(horario)}
-                                className="px-3 py-2 border border-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-800 text-sm"
-                              >
-                                Editar
-                              </button>
-                              <button
-                                onClick={() => abrirFinalizar(agendamento)}
-                                className="px-3 py-2 bg-amber-600 text-black font-semibold rounded-lg hover:bg-amber-700 text-sm"
-                              >
-                                Finalizar atendimento
-                              </button>
-                            </>
-                          )}
+                          <button
+                            onClick={() => abrirModalSlot(horario)}
+                            className="px-3 py-2 border border-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-800 text-sm"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            onClick={() => abrirFinalizar(agendamento)}
+                            className="px-3 py-2 bg-amber-600 text-black font-semibold rounded-lg hover:bg-amber-700 text-sm"
+                          >
+                            Finalizar atendimento
+                          </button>
                         </div>
                       )}
                     </>
@@ -418,7 +320,7 @@ function BarbeiroAgenda() {
                       <span className="text-red-400 text-sm">
                         {diaInteiroBloqueado ? "Folga do dia" : "Bloqueado"}
                       </span>
-                      {souDono && bloqueioEspecifico && (
+                      {bloqueioEspecifico && (
                         <button
                           onClick={() => desbloquearHorario(bloqueioEspecifico.id)}
                           className="text-sm text-zinc-500 hover:text-zinc-300"
@@ -435,14 +337,12 @@ function BarbeiroAgenda() {
                       >
                         Livre — clique para agendar
                       </button>
-                      {souDono && (
-                        <button
-                          onClick={() => bloquearHorario(horario)}
-                          className="text-sm text-zinc-600 hover:text-red-400"
-                        >
-                          Bloquear
-                        </button>
-                      )}
+                      <button
+                        onClick={() => bloquearHorario(horario)}
+                        className="text-sm text-zinc-600 hover:text-red-400"
+                      >
+                        Bloquear
+                      </button>
                     </div>
                   )}
                 </div>

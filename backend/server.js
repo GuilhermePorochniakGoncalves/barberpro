@@ -14,26 +14,20 @@ const {
   validarCliente,
   validarBarbeiro,
   validarVenda,
-  validarCredenciaisLogin,
-  validarDefinicaoLogin,
   validarServico,
   validarProduto,
   validarBloqueio,
 } = require("./validation");
-const {
-  hashSenha,
-  verificarSenha,
-  criarSessao,
-  removerSessao,
-  resolverToken,
-  autenticar,
-  barrarSeNaoForDono,
-} = require("./auth");
 
 const app = express();
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
 app.use(express.json());
+
+// Sem login: qualquer pessoa (recepção, qualquer barbeiro) gerencia a
+// agenda de qualquer barbeiro — na prática do salão, um barbeiro cobre o
+// outro o tempo todo, então uma conta por barbeiro atrapalhava mais do
+// que ajudava. Ver histórico do projeto se precisar reintroduzir login.
 
 // ---------- Helpers ----------
 
@@ -88,75 +82,10 @@ function slotBloqueado(barbeiroId, data, horario) {
     .get(barbeiroId, data, horario);
 }
 
-// ---------- Login ----------
-
-app.post("/barbeiros/login", (req, res) => {
-  const { errors, valido, data } = validarCredenciaisLogin(req.body);
-  if (!valido) return res.status(400).json({ erros: errors });
-
-  const barbeiro = db.prepare("SELECT * FROM barbeiros WHERE usuario = ?").get(data.usuario);
-
-  // Mensagem genérica de propósito — não revela se foi o usuário ou a senha.
-  if (!barbeiro || !verificarSenha(data.senha, barbeiro.senha_hash)) {
-    return res.status(401).json({ erro: "Usuário ou senha inválidos." });
-  }
-
-  const { token, expiraEm } = criarSessao(barbeiro.id);
-  res.json({
-    token,
-    expiraEm,
-    barbeiro: { id: barbeiro.id, nome: barbeiro.nome, usuario: barbeiro.usuario },
-  });
-});
-
-app.post("/barbeiros/logout", (req, res) => {
-  const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-  if (token) removerSessao(token);
-  res.status(204).send();
-});
-
-// Define ou troca usuário+senha de um barbeiro. Primeira configuração é
-// aberta (o barbeiro ainda não tem como se autenticar); depois de
-// configurado, só o próprio dono (autenticado) pode trocar.
-app.put("/barbeiros/:id/login", (req, res) => {
-  const id = Number(req.params.id);
-  const barbeiro = db.prepare("SELECT * FROM barbeiros WHERE id = ?").get(id);
-  if (!barbeiro) return res.status(404).json({ erro: "Barbeiro não encontrado." });
-
-  if (barbeiro.usuario) {
-    const header = req.headers.authorization || "";
-    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-    const autenticado = resolverToken(token);
-    if (!autenticado || autenticado.id !== id) {
-      return res.status(403).json({ erro: "Faça login como esse barbeiro pra trocar as credenciais." });
-    }
-  }
-
-  const { errors, valido, data } = validarDefinicaoLogin(req.body);
-  if (!valido) return res.status(400).json({ erros: errors });
-
-  const usuarioEmUso = db
-    .prepare("SELECT id FROM barbeiros WHERE usuario = ? AND id != ?")
-    .get(data.usuario, id);
-  if (usuarioEmUso) return res.status(409).json({ erro: "Esse nome de usuário já está em uso." });
-
-  db.prepare("UPDATE barbeiros SET usuario = ?, senha_hash = ? WHERE id = ?").run(
-    data.usuario,
-    hashSenha(data.senha),
-    id
-  );
-
-  res.json({ id: barbeiro.id, nome: barbeiro.nome, usuario: data.usuario });
-});
-
 // ---------- Barbeiros ----------
 
 app.get("/barbeiros", (req, res) => {
-  // Nunca expõe usuario/senha_hash na listagem pública.
-  const barbeiros = db
-    .prepare("SELECT id, nome, ativo, criado_em, (usuario IS NOT NULL) AS tem_login FROM barbeiros ORDER BY nome")
-    .all();
+  const barbeiros = db.prepare("SELECT * FROM barbeiros ORDER BY nome").all();
   res.json(barbeiros);
 });
 
@@ -165,9 +94,7 @@ app.post("/barbeiros", (req, res) => {
   if (!valido) return res.status(400).json({ erros: errors });
 
   const info = db.prepare("INSERT INTO barbeiros (nome) VALUES (?)").run(data.nome);
-  const barbeiro = db
-    .prepare("SELECT id, nome, ativo, criado_em FROM barbeiros WHERE id = ?")
-    .get(info.lastInsertRowid);
+  const barbeiro = db.prepare("SELECT * FROM barbeiros WHERE id = ?").get(info.lastInsertRowid);
   res.status(201).json(barbeiro);
 });
 
@@ -184,9 +111,7 @@ app.put("/barbeiros/:id", (req, res) => {
   }
 
   db.prepare("UPDATE barbeiros SET nome = ?, ativo = ? WHERE id = ?").run(nome, ativo, id);
-  res.json(
-    db.prepare("SELECT id, nome, ativo, criado_em FROM barbeiros WHERE id = ?").get(id)
-  );
+  res.json(db.prepare("SELECT * FROM barbeiros WHERE id = ?").get(id));
 });
 
 app.delete("/barbeiros/:id", (req, res) => {
@@ -203,7 +128,7 @@ app.delete("/barbeiros/:id", (req, res) => {
     db.prepare("UPDATE barbeiros SET ativo = 0 WHERE id = ?").run(id);
     return res.status(200).json({
       aviso: "Barbeiro tem agendamentos/atendimentos no histórico — foi desativado em vez de excluído.",
-      barbeiro: db.prepare("SELECT id, nome, ativo, criado_em FROM barbeiros WHERE id = ?").get(id),
+      barbeiro: db.prepare("SELECT * FROM barbeiros WHERE id = ?").get(id),
     });
   }
 
@@ -229,11 +154,12 @@ app.get("/catalogo", (req, res) => {
   res.json(itens);
 });
 
-// -- Serviços (por barbeiro; só o próprio dono gerencia) --
+// -- Serviços (pertencem a um barbeiro, mas qualquer um pode gerenciar) --
 
-app.post("/barbeiros/:id/servicos", autenticar, (req, res) => {
+app.post("/barbeiros/:id/servicos", (req, res) => {
   const barbeiroId = Number(req.params.id);
-  if (barrarSeNaoForDono(req, res, barbeiroId)) return;
+  const barbeiro = db.prepare("SELECT * FROM barbeiros WHERE id = ?").get(barbeiroId);
+  if (!barbeiro) return res.status(404).json({ erro: "Barbeiro não encontrado." });
 
   const { errors, valido, data } = validarServico(req.body);
   if (!valido) return res.status(400).json({ erros: errors });
@@ -241,7 +167,7 @@ app.post("/barbeiros/:id/servicos", autenticar, (req, res) => {
   const duplicado = db
     .prepare("SELECT id FROM catalogo_itens WHERE tipo = 'servico' AND barbeiro_id = ? AND nome = ?")
     .get(barbeiroId, data.nome);
-  if (duplicado) return res.status(409).json({ erro: "Você já tem um serviço com esse nome." });
+  if (duplicado) return res.status(409).json({ erro: "Esse barbeiro já tem um serviço com esse nome." });
 
   const info = db
     .prepare(
@@ -252,9 +178,8 @@ app.post("/barbeiros/:id/servicos", autenticar, (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM catalogo_itens WHERE id = ?").get(info.lastInsertRowid));
 });
 
-app.put("/barbeiros/:id/servicos/:itemId", autenticar, (req, res) => {
+app.put("/barbeiros/:id/servicos/:itemId", (req, res) => {
   const barbeiroId = Number(req.params.id);
-  if (barrarSeNaoForDono(req, res, barbeiroId)) return;
 
   const item = db
     .prepare("SELECT * FROM catalogo_itens WHERE id = ? AND tipo = 'servico' AND barbeiro_id = ?")
@@ -276,9 +201,8 @@ app.put("/barbeiros/:id/servicos/:itemId", autenticar, (req, res) => {
   res.json(db.prepare("SELECT * FROM catalogo_itens WHERE id = ?").get(item.id));
 });
 
-app.delete("/barbeiros/:id/servicos/:itemId", autenticar, (req, res) => {
+app.delete("/barbeiros/:id/servicos/:itemId", (req, res) => {
   const barbeiroId = Number(req.params.id);
-  if (barrarSeNaoForDono(req, res, barbeiroId)) return;
 
   const item = db
     .prepare("SELECT * FROM catalogo_itens WHERE id = ? AND tipo = 'servico' AND barbeiro_id = ?")
@@ -289,10 +213,9 @@ app.delete("/barbeiros/:id/servicos/:itemId", autenticar, (req, res) => {
   res.status(204).send();
 });
 
-// -- Produtos (compartilhados; qualquer barbeiro autenticado gerencia —
-// sem conceito de admin ainda, ver plano/observação no código) --
+// -- Produtos (compartilhados pela barbearia inteira) --
 
-app.post("/produtos", autenticar, (req, res) => {
+app.post("/produtos", (req, res) => {
   const { errors, valido, data } = validarProduto(req.body);
   if (!valido) return res.status(400).json({ erros: errors });
 
@@ -310,7 +233,7 @@ app.post("/produtos", autenticar, (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM catalogo_itens WHERE id = ?").get(info.lastInsertRowid));
 });
 
-app.put("/produtos/:itemId", autenticar, (req, res) => {
+app.put("/produtos/:itemId", (req, res) => {
   const item = db
     .prepare("SELECT * FROM catalogo_itens WHERE id = ? AND tipo = 'produto'")
     .get(Number(req.params.itemId));
@@ -332,7 +255,7 @@ app.put("/produtos/:itemId", autenticar, (req, res) => {
   res.json(db.prepare("SELECT * FROM catalogo_itens WHERE id = ?").get(item.id));
 });
 
-app.delete("/produtos/:itemId", autenticar, (req, res) => {
+app.delete("/produtos/:itemId", (req, res) => {
   const item = db
     .prepare("SELECT * FROM catalogo_itens WHERE id = ? AND tipo = 'produto'")
     .get(Number(req.params.itemId));
@@ -355,9 +278,8 @@ app.get("/barbeiros/:id/bloqueios", (req, res) => {
   res.json(bloqueios);
 });
 
-app.post("/barbeiros/:id/bloqueios", autenticar, (req, res) => {
+app.post("/barbeiros/:id/bloqueios", (req, res) => {
   const barbeiroId = Number(req.params.id);
-  if (barrarSeNaoForDono(req, res, barbeiroId)) return;
 
   const { errors, valido, data } = validarBloqueio(req.body);
   if (!valido) return res.status(400).json({ erros: errors });
@@ -374,9 +296,8 @@ app.post("/barbeiros/:id/bloqueios", autenticar, (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM barbeiro_bloqueios WHERE id = ?").get(info.lastInsertRowid));
 });
 
-app.delete("/barbeiros/:id/bloqueios/:bloqueioId", autenticar, (req, res) => {
+app.delete("/barbeiros/:id/bloqueios/:bloqueioId", (req, res) => {
   const barbeiroId = Number(req.params.id);
-  if (barrarSeNaoForDono(req, res, barbeiroId)) return;
 
   const bloqueio = db
     .prepare("SELECT * FROM barbeiro_bloqueios WHERE id = ? AND barbeiro_id = ?")
@@ -494,11 +415,10 @@ app.post("/agendamentos", (req, res) => {
     .json(db.prepare("SELECT * FROM agendamentos WHERE id = ?").get(info.lastInsertRowid));
 });
 
-app.put("/agendamentos/:id", autenticar, (req, res) => {
+app.put("/agendamentos/:id", (req, res) => {
   const id = Number(req.params.id);
   const existente = db.prepare("SELECT * FROM agendamentos WHERE id = ?").get(id);
   if (!existente) return res.status(404).json({ erro: "Agendamento não encontrado." });
-  if (barrarSeNaoForDono(req, res, existente.barbeiro_id)) return;
   if (existente.status === "concluido") {
     return res.status(409).json({ erro: "Atendimento já concluído não pode ser alterado." });
   }
@@ -533,11 +453,10 @@ app.put("/agendamentos/:id", autenticar, (req, res) => {
   res.json(db.prepare("SELECT * FROM agendamentos WHERE id = ?").get(id));
 });
 
-app.delete("/agendamentos/:id", autenticar, (req, res) => {
+app.delete("/agendamentos/:id", (req, res) => {
   const id = Number(req.params.id);
   const existente = db.prepare("SELECT * FROM agendamentos WHERE id = ?").get(id);
   if (!existente) return res.status(404).json({ erro: "Agendamento não encontrado." });
-  if (barrarSeNaoForDono(req, res, existente.barbeiro_id)) return;
   if (existente.status === "concluido") {
     return res.status(409).json({ erro: "Atendimento já concluído não pode ser cancelado." });
   }
@@ -584,7 +503,7 @@ app.get("/vendas", (req, res) => {
   res.json(vendasComItens);
 });
 
-app.post("/vendas", autenticar, (req, res) => {
+app.post("/vendas", (req, res) => {
   const agendamento = db
     .prepare("SELECT * FROM agendamentos WHERE id = ?")
     .get(Number(req.body?.agendamentoId));
@@ -592,7 +511,6 @@ app.post("/vendas", autenticar, (req, res) => {
   if (!agendamento) {
     return res.status(404).json({ erro: "Agendamento não encontrado." });
   }
-  if (barrarSeNaoForDono(req, res, agendamento.barbeiro_id)) return;
   if (agendamento.status === "concluido") {
     return res.status(409).json({ erro: "Este atendimento já foi finalizado." });
   }

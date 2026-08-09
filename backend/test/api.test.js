@@ -16,28 +16,19 @@ test("catálogo vem semeado só com produtos (serviço é cadastrado por barbeir
   assert.ok(data.every((i) => i.estoque > 0));
 }));
 
-test("barbeiro: criar, validar nome vazio, listagem não expõe senha_hash", comServidor(async ({ req }) => {
+test("barbeiro: criar, validar nome vazio", comServidor(async ({ req }) => {
   const vazio = await req("POST", "/barbeiros", { nome: "" });
   assert.equal(vazio.status, 400);
 
   const ok = await req("POST", "/barbeiros", { nome: "Zaqueu" });
   assert.equal(ok.status, 201);
   assert.equal(ok.data.nome, "Zaqueu");
-  assert.equal(ok.data.senha_hash, undefined);
-
-  const lista = await req("GET", "/barbeiros");
-  assert.ok(lista.data.every((b) => b.senha_hash === undefined));
 }));
 
-test("barbeiro cadastra o próprio serviço com preço e usa no agendamento; produto compartilhado entra como item extra", comServidor(async ({ req, criarBarbeiroLogado }) => {
-  const zaqueu = await criarBarbeiroLogado("Zaqueu", "zaqueu");
+test("qualquer um cadastra serviço de qualquer barbeiro (sem login) e usa no agendamento; produto compartilhado entra como item extra", comServidor(async ({ req, criarBarbeiro }) => {
+  const zaqueu = await criarBarbeiro("Zaqueu");
 
-  const servico = await req(
-    "POST",
-    `/barbeiros/${zaqueu.id}/servicos`,
-    { nome: "Corte Simples", preco: 30 },
-    zaqueu.token
-  );
+  const servico = await req("POST", `/barbeiros/${zaqueu.id}/servicos`, { nome: "Corte Simples", preco: 30 });
   assert.equal(servico.status, 201);
   assert.equal(servico.data.preco, 30);
 
@@ -57,19 +48,14 @@ test("barbeiro cadastra o próprio serviço com preço e usa no agendamento; pro
   const produto = catalogo.data.find((i) => i.tipo === "produto");
   assert.ok(produto, "catálogo com barbeiroId deve trazer produtos compartilhados também");
 
-  const venda = await req(
-    "POST",
-    "/vendas",
-    {
-      agendamentoId: criado.data.id,
-      formaPagamento: "pix",
-      itens: [
-        { nome: "Corte Simples", quantidade: 1 },
-        { nome: produto.nome, quantidade: 2 },
-      ],
-    },
-    zaqueu.token
-  );
+  const venda = await req("POST", "/vendas", {
+    agendamentoId: criado.data.id,
+    formaPagamento: "pix",
+    itens: [
+      { nome: "Corte Simples", quantidade: 1 },
+      { nome: produto.nome, quantidade: 2 },
+    ],
+  });
   assert.equal(venda.status, 201);
   assert.equal(venda.data.valor_total, 30 + produto.preco * 2);
 
@@ -79,11 +65,11 @@ test("barbeiro cadastra o próprio serviço com preço e usa no agendamento; pro
   assert.equal(estoqueAtualizado.estoque, produto.estoque - 2);
 }));
 
-test("conflito de horário é por barbeiro; outro barbeiro pode atender no mesmo slot", comServidor(async ({ req, criarBarbeiroLogado }) => {
-  const b1 = await criarBarbeiroLogado("Zaqueu", "zaqueu2");
-  const b2 = (await req("POST", "/barbeiros", { nome: "Fulano" })).data;
+test("conflito de horário é por barbeiro; outro barbeiro pode atender no mesmo slot", comServidor(async ({ req, criarBarbeiro }) => {
+  const b1 = await criarBarbeiro("Zaqueu");
+  const b2 = await criarBarbeiro("Fulano");
 
-  await req("POST", `/barbeiros/${b1.id}/servicos`, { nome: "Barba", preco: 25 }, b1.token);
+  await req("POST", `/barbeiros/${b1.id}/servicos`, { nome: "Barba", preco: 25 });
 
   const dadosAgendamento = {
     barbeiroId: b1.id,
@@ -110,9 +96,9 @@ test("conflito de horário é por barbeiro; outro barbeiro pode atender no mesmo
   assert.equal(outroBarbeiro.status, 400);
 }));
 
-test("relatório mensal agrega faturamento por barbeiro e forma de pagamento", comServidor(async ({ req, criarBarbeiroLogado }) => {
-  const zaqueu = await criarBarbeiroLogado("Zaqueu", "zaqueu3");
-  await req("POST", `/barbeiros/${zaqueu.id}/servicos`, { nome: "Corte", preco: 40 }, zaqueu.token);
+test("relatório mensal agrega faturamento por barbeiro e forma de pagamento", comServidor(async ({ req, criarBarbeiro }) => {
+  const zaqueu = await criarBarbeiro("Zaqueu");
+  await req("POST", `/barbeiros/${zaqueu.id}/servicos`, { nome: "Corte", preco: 40 });
 
   const criado = await req("POST", "/agendamentos", {
     barbeiroId: zaqueu.id,
@@ -123,12 +109,11 @@ test("relatório mensal agrega faturamento por barbeiro e forma de pagamento", c
     horario: "11:00",
   });
 
-  await req(
-    "POST",
-    "/vendas",
-    { agendamentoId: criado.data.id, formaPagamento: "dinheiro", itens: [{ nome: "Corte", quantidade: 1 }] },
-    zaqueu.token
-  );
+  await req("POST", "/vendas", {
+    agendamentoId: criado.data.id,
+    formaPagamento: "dinheiro",
+    itens: [{ nome: "Corte", quantidade: 1 }],
+  });
 
   // A venda é registrada com a data/hora real ("agora"), não a `data` do
   // agendamento — o relatório precisa ser consultado pelo mês corrente.
@@ -157,9 +142,9 @@ test("relatório mensal agrega faturamento por barbeiro e forma de pagamento", c
   assert.ok(joao.ultimo_atendimento);
 }));
 
-test("agendamento: editar move de horário sem conflito, e cancelar remove (autenticado como dono)", comServidor(async ({ req, criarBarbeiroLogado }) => {
-  const barbeiro = await criarBarbeiroLogado("Zaqueu", "zaqueu4");
-  await req("POST", `/barbeiros/${barbeiro.id}/servicos`, { nome: "Barba", preco: 25 }, barbeiro.token);
+test("agendamento: editar move de horário sem conflito, e cancelar remove", comServidor(async ({ req, criarBarbeiro }) => {
+  const barbeiro = await criarBarbeiro("Zaqueu");
+  await req("POST", `/barbeiros/${barbeiro.id}/servicos`, { nome: "Barba", preco: 25 });
 
   const criado = await req("POST", "/agendamentos", {
     barbeiroId: barbeiro.id,
@@ -171,23 +156,18 @@ test("agendamento: editar move de horário sem conflito, e cancelar remove (aute
   });
   assert.equal(criado.status, 201);
 
-  const editado = await req(
-    "PUT",
-    `/agendamentos/${criado.data.id}`,
-    {
-      barbeiroId: barbeiro.id,
-      nome: "Ana",
-      telefone: "11999990000",
-      servico: "Barba",
-      data: "2026-08-11",
-      horario: "11:00",
-    },
-    barbeiro.token
-  );
+  const editado = await req("PUT", `/agendamentos/${criado.data.id}`, {
+    barbeiroId: barbeiro.id,
+    nome: "Ana",
+    telefone: "11999990000",
+    servico: "Barba",
+    data: "2026-08-11",
+    horario: "11:00",
+  });
   assert.equal(editado.status, 200);
   assert.equal(editado.data.horario, "11:00");
 
-  const cancelado = await req("DELETE", `/agendamentos/${criado.data.id}`, null, barbeiro.token);
+  const cancelado = await req("DELETE", `/agendamentos/${criado.data.id}`);
   assert.equal(cancelado.status, 204);
 
   const listaVazia = await req("GET", `/agendamentos?barbeiroId=${barbeiro.id}&data=2026-08-11`);

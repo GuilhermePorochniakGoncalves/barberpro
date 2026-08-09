@@ -3,11 +3,9 @@ import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
 import Barbeiros from "./pages/Barbeiros";
 import BarbeiroAgenda from "./pages/BarbeiroAgenda";
-import Relatorios from "./pages/Relatorios";
-import Login from "./pages/Login";
-import MeusServicos from "./pages/MeusServicos";
+import ServicosBarbeiro from "./pages/ServicosBarbeiro";
 import Produtos from "./pages/Produtos";
-import RotaProtegida from "./components/RotaProtegida";
+import Relatorios from "./pages/Relatorios";
 
 function AppRoutes() {
   return (
@@ -17,24 +15,9 @@ function AppRoutes() {
         <Route path="/clientes" element={<Clients />} />
         <Route path="/barbeiros" element={<Barbeiros />} />
         <Route path="/barbeiros/:id" element={<BarbeiroAgenda />} />
+        <Route path="/barbeiros/:id/servicos" element={<ServicosBarbeiro />} />
+        <Route path="/produtos" element={<Produtos />} />
         <Route path="/relatorios" element={<Relatorios />} />
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/meus-servicos"
-          element={
-            <RotaProtegida>
-              <MeusServicos />
-            </RotaProtegida>
-          }
-        />
-        <Route
-          path="/produtos"
-          element={
-            <RotaProtegida>
-              <Produtos />
-            </RotaProtegida>
-          }
-        />
       </Routes>
     </BrowserRouter>
   );

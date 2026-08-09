@@ -165,35 +165,6 @@ function validarVenda(body = {}, itensValidos = new Map()) {
   };
 }
 
-// Login (usuário + senha) pra entrar. Usado em POST /barbeiros/login.
-function validarCredenciaisLogin(body = {}) {
-  const errors = [];
-
-  const usuario = String(body.usuario ?? "").trim();
-  const senha = String(body.senha ?? "");
-
-  if (!usuario) errors.push("Usuário é obrigatório.");
-  if (!senha) errors.push("Senha é obrigatória.");
-
-  return { errors, valido: errors.length === 0, data: { usuario, senha } };
-}
-
-// Definir/trocar usuário+senha de um barbeiro. Usado em PUT /barbeiros/:id/login.
-function validarDefinicaoLogin(body = {}) {
-  const errors = [];
-
-  const usuario = String(body.usuario ?? "").trim();
-  const senha = String(body.senha ?? "");
-
-  if (usuario.length < 3) errors.push("Usuário precisa ter ao menos 3 caracteres.");
-  else if (!/^[a-zA-Z0-9._-]+$/.test(usuario)) {
-    errors.push("Usuário só pode ter letras, números, ponto, hífen e underscore.");
-  }
-  if (senha.length < 6) errors.push("Senha precisa ter ao menos 6 caracteres.");
-
-  return { errors, valido: errors.length === 0, data: { usuario, senha } };
-}
-
 function validarServico(body = {}) {
   const errors = [];
 
@@ -244,8 +215,6 @@ module.exports = {
   validarCliente,
   validarBarbeiro,
   validarVenda,
-  validarCredenciaisLogin,
-  validarDefinicaoLogin,
   validarServico,
   validarProduto,
   validarBloqueio,

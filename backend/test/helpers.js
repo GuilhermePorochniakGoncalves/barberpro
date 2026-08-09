@@ -12,32 +12,22 @@ function comServidor(fn) {
     const { port } = server.address();
     const base = `http://localhost:${port}`;
 
-    async function req(method, path, body, token) {
-      const headers = {};
-      if (body) headers["Content-Type"] = "application/json";
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-
+    async function req(method, path, body) {
       const response = await fetch(base + path, {
         method,
-        headers,
+        headers: body ? { "Content-Type": "application/json" } : undefined,
         body: body ? JSON.stringify(body) : undefined,
       });
       const data = response.status === 204 ? null : await response.json();
       return { status: response.status, data };
     }
 
-    // Cria um barbeiro, dá login nele (usuário+senha) e devolve token +
-    // dados — atalho usado por quase todo teste que precisa agir "como"
-    // um barbeiro autenticado.
-    async function criarBarbeiroLogado(nome, usuario, senha = "senha123") {
-      const barbeiro = (await req("POST", "/barbeiros", { nome })).data;
-      await req("PUT", `/barbeiros/${barbeiro.id}/login`, { usuario, senha });
-      const login = await req("POST", "/barbeiros/login", { usuario, senha });
-      return { ...barbeiro, usuario, token: login.data.token };
+    async function criarBarbeiro(nome) {
+      return (await req("POST", "/barbeiros", { nome })).data;
     }
 
     try {
-      await fn({ req, criarBarbeiroLogado });
+      await fn({ req, criarBarbeiro });
     } finally {
       server.close();
     }
