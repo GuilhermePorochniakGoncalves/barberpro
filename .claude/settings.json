@@ -20,7 +20,8 @@
       "Bash(node shot-block1.cjs)",
       "Bash(node shot-nologin.cjs)",
       "Bash(node shot-block2.cjs)",
-      "Bash(node shot-responsive.cjs)"
+      "Bash(node shot-responsive.cjs)",
+      "Bash(rm -rf dist)"
     ]
   }
 }

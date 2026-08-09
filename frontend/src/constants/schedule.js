@@ -3,7 +3,9 @@
 //
 // `DIAS` e `SERVICOS` fixos saíram daqui: dia agora é uma data real
 // (frontend/src/utils/date.js) e os serviços vêm do catálogo do backend
-// (com preço), consumido via useBarbeiros().catalogo.
+// (com preço, por barbeiro) via GET /catalogo?barbeiroId=, buscado pela
+// página que precisa (ver BarbeiroAgenda.jsx) — não é mais um contexto
+// global, já que o catálogo de serviços é por-barbeiro.
 
 export const HORARIOS = [
   "08:00",
