@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -f data/barberpro.db data/barberpro.db-*)",
+      "Bash(echo \"backend pid $!\")",
+      "Bash(nohup npm run dev)",
+      "Bash(echo \"frontend pid $!\")",
+      "Bash(timeout 30 bash -c 'until curl -sf http://localhost:5173 >/dev/null; do sleep 1; done')",
+      "Bash(npx playwright *)",
+      "Bash(node \"C:\\\\Users\\\\guico\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-guico-OneDrive-Desktop-barberpro\\\\972ac668-c68f-423c-a141-9f93333c36b7\\\\scratchpad\\\\e2e.js\")",
+      "Bash(npx --yes -p playwright node \"C:\\\\Users\\\\guico\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-guico-OneDrive-Desktop-barberpro\\\\972ac668-c68f-423c-a141-9f93333c36b7\\\\scratchpad\\\\e2e.js\")",
+      "Bash(cp \"C:\\\\Users\\\\guico\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-guico-OneDrive-Desktop-barberpro\\\\972ac668-c68f-423c-a141-9f93333c36b7\\\\scratchpad\\\\e2e.js\" \"c:\\\\Users\\\\guico\\\\OneDrive\\\\Desktop\\\\barberpro\\\\frontend\\\\e2e-temp.cjs\")",
+      "Bash(node e2e-temp.cjs)"
+    ]
+  }
+}

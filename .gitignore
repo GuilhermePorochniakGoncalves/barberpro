@@ -1,0 +1,9 @@
+# node_modules/dist/.env de cada pacote já são ignorados pelos
+# .gitignore de backend/ e frontend/ (git respeita .gitignore aninhado).
+
+# Configuração local do Claude Code — específica de cada dev/máquina.
+.claude/settings.local.json
+
+# SO / editor
+.DS_Store
+Thumbs.db
