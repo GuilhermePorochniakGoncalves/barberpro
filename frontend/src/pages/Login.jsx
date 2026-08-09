@@ -35,10 +35,10 @@ function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-6">
-      <form onSubmit={entrar} className="bg-white rounded-2xl shadow p-8 w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-green-600 mb-1">BarberPro</h1>
-        <p className="text-gray-500 mb-6">Login do barbeiro</p>
+    <div className="min-h-screen bg-black flex items-center justify-center p-6">
+      <form onSubmit={entrar} className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl shadow-black/50 p-8 w-full max-w-sm">
+        <h1 className="text-2xl font-bold text-amber-500 mb-1">BarberPro</h1>
+        <p className="text-zinc-400 mb-6">Login do barbeiro</p>
 
         <div className="space-y-4">
           <input
@@ -46,7 +46,7 @@ function Login() {
             placeholder="Usuário"
             value={usuario}
             onChange={(e) => setUsuario(e.target.value)}
-            className="w-full border rounded-lg p-3"
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-zinc-100 placeholder:text-zinc-500"
             disabled={entrando}
             autoFocus
           />
@@ -55,13 +55,13 @@ function Login() {
             placeholder="Senha"
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
-            className="w-full border rounded-lg p-3"
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-zinc-100 placeholder:text-zinc-500"
             disabled={entrando}
           />
         </div>
 
         {erro && (
-          <p className="text-red-600 text-sm mt-4" role="alert">
+          <p className="text-red-400 text-sm mt-4" role="alert">
             {erro}
           </p>
         )}
@@ -69,12 +69,12 @@ function Login() {
         <button
           type="submit"
           disabled={entrando}
-          className="w-full mt-6 bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50"
+          className="w-full mt-6 bg-amber-600 text-black font-semibold py-3 rounded-lg hover:bg-amber-700 disabled:opacity-50"
         >
           {entrando ? "Entrando..." : "Entrar"}
         </button>
 
-        <p className="text-xs text-gray-400 mt-4">
+        <p className="text-xs text-zinc-500 mt-4">
           Ainda não tem login? Peça pra outro barbeiro te cadastrar, ou defina
           usuário/senha na sua própria agenda na primeira vez.
         </p>

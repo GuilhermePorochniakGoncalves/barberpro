@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { useBarbeiros } from "../context/useBarbeiros";
 
+// `catalogo`: itens disponíveis pra ESSE barbeiro (os próprios serviços +
+// produtos compartilhados), buscado pelo componente pai — ver mesma nota
+// em AppointmentModal.jsx.
+
 const FORMAS_PAGAMENTO = [
   { valor: "debito", rotulo: "Débito" },
   { valor: "credito", rotulo: "Crédito" },
@@ -16,8 +20,8 @@ function formatarReais(valor) {
 // Mostra o serviço já agendado (preço do catálogo), permite adicionar itens
 // extra (produtos/serviços consumidos além do corte) e escolher a forma de
 // pagamento antes de confirmar a venda.
-function FinalizarAtendimentoModal({ isOpen, onClose, agendamento, onFinalizado }) {
-  const { catalogo, finalizarAtendimento } = useBarbeiros();
+function FinalizarAtendimentoModal({ isOpen, onClose, agendamento, catalogo = [], onFinalizado }) {
+  const { finalizarAtendimento } = useBarbeiros();
 
   const [itensExtras, setItensExtras] = useState([]);
   const [itemParaAdicionar, setItemParaAdicionar] = useState("");
@@ -96,29 +100,29 @@ function FinalizarAtendimentoModal({ isOpen, onClose, agendamento, onFinalizado 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <h2 className="text-2xl font-bold mb-1">Finalizar atendimento</h2>
-        <p className="text-gray-500 mb-6">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <h2 className="text-2xl font-bold mb-1 text-white">Finalizar atendimento</h2>
+        <p className="text-zinc-400 mb-6">
           {agendamento.nome} • {agendamento.horario}
         </p>
 
-        <div className="bg-white rounded-xl border p-4 mb-4">
-          <h3 className="font-semibold mb-3">Itens</h3>
+        <div className="bg-zinc-950/50 rounded-xl border border-zinc-800 p-4 mb-4">
+          <h3 className="font-semibold mb-3 text-zinc-100">Itens</h3>
 
           <div className="space-y-2">
             {itensVenda.map((item) => (
-              <div key={item.nome} className="flex justify-between items-center border-b pb-2">
-                <span>
+              <div key={item.nome} className="flex justify-between items-center border-b border-zinc-800 pb-2">
+                <span className="text-zinc-300">
                   {item.nome}
                   {item.quantidade > 1 ? ` × ${item.quantidade}` : ""}
                 </span>
                 <div className="flex items-center gap-3">
-                  <span>{formatarReais(item.preco * item.quantidade)}</span>
+                  <span className="text-zinc-100">{formatarReais(item.preco * item.quantidade)}</span>
                   {item.nome !== agendamento.servico && (
                     <button
                       onClick={() => removerItem(item.nome)}
-                      className="text-red-500 text-sm hover:underline"
+                      className="text-red-400 text-sm hover:text-red-300"
                       disabled={salvando}
                     >
                       remover
@@ -133,7 +137,7 @@ function FinalizarAtendimentoModal({ isOpen, onClose, agendamento, onFinalizado 
             <select
               value={itemParaAdicionar}
               onChange={(e) => setItemParaAdicionar(e.target.value)}
-              className="flex-1 border rounded-lg p-2"
+              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-zinc-100"
               disabled={salvando}
             >
               <option value="">Adicionar produto/serviço extra...</option>
@@ -146,20 +150,20 @@ function FinalizarAtendimentoModal({ isOpen, onClose, agendamento, onFinalizado 
             <button
               onClick={adicionarItem}
               disabled={!itemParaAdicionar || salvando}
-              className="px-4 py-2 border rounded-lg hover:bg-gray-100 disabled:opacity-50"
+              className="px-4 py-2 border border-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-800 disabled:opacity-50"
             >
               Adicionar
             </button>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border p-4 mb-4">
+        <div className="bg-zinc-950/50 rounded-xl border border-zinc-800 p-4 mb-4">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="font-semibold text-lg">Total</h3>
-            <span className="text-2xl font-bold text-green-600">{formatarReais(total)}</span>
+            <h3 className="font-semibold text-lg text-zinc-100">Total</h3>
+            <span className="text-2xl font-bold text-amber-500">{formatarReais(total)}</span>
           </div>
 
-          <p className="font-medium mb-2 text-sm text-gray-600">Forma de pagamento</p>
+          <p className="font-medium mb-2 text-sm text-zinc-400">Forma de pagamento</p>
           <div className="grid grid-cols-2 gap-3">
             {FORMAS_PAGAMENTO.map((f) => (
               <button
@@ -168,8 +172,8 @@ function FinalizarAtendimentoModal({ isOpen, onClose, agendamento, onFinalizado 
                 disabled={salvando}
                 className={`border rounded-lg py-3 transition ${
                   formaPagamento === f.valor
-                    ? "border-green-600 bg-green-50 text-green-700 font-semibold"
-                    : "hover:border-green-500"
+                    ? "border-amber-600 bg-amber-950/30 text-amber-500 font-semibold"
+                    : "border-zinc-700 text-zinc-300 hover:border-amber-700/50"
                 }`}
               >
                 {f.rotulo}
@@ -179,7 +183,7 @@ function FinalizarAtendimentoModal({ isOpen, onClose, agendamento, onFinalizado 
         </div>
 
         {erro && (
-          <p className="text-red-600 text-sm mb-4" role="alert">
+          <p className="text-red-400 text-sm mb-4" role="alert">
             {erro}
           </p>
         )}
@@ -188,14 +192,14 @@ function FinalizarAtendimentoModal({ isOpen, onClose, agendamento, onFinalizado 
           <button
             onClick={fecharEResetar}
             disabled={salvando}
-            className="px-4 py-2 border rounded-lg hover:bg-gray-100 disabled:opacity-50"
+            className="px-4 py-2 border border-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-800 disabled:opacity-50"
           >
             Fechar
           </button>
           <button
             onClick={confirmar}
             disabled={salvando}
-            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+            className="px-6 py-2 bg-amber-600 text-black font-semibold rounded-lg hover:bg-amber-700 disabled:opacity-50"
           >
             {salvando ? "Confirmando..." : "Confirmar pagamento"}
           </button>

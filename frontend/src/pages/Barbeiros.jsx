@@ -40,21 +40,21 @@ function Barbeiros() {
   return (
     <Layout>
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">Barbeiros</h1>
+        <h1 className="text-3xl font-bold text-white">Barbeiros</h1>
 
         <button
           onClick={() => setCriando(true)}
-          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+          className="bg-amber-600 text-black font-semibold px-4 py-2 rounded-lg hover:bg-amber-700"
         >
           Novo barbeiro
         </button>
       </div>
 
-      {erro && <p className="text-red-600 mb-4">{erro}</p>}
+      {erro && <p className="text-red-400 mb-4">{erro}</p>}
 
       {criando && (
-        <div className="bg-white rounded-2xl shadow p-6 mb-6">
-          <h2 className="font-bold text-lg mb-3">Novo barbeiro</h2>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-6">
+          <h2 className="font-bold text-lg mb-3 text-zinc-100">Novo barbeiro</h2>
           <div className="flex gap-3">
             <input
               type="text"
@@ -63,13 +63,13 @@ function Barbeiros() {
               value={nomeNovo}
               onChange={(e) => setNomeNovo(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && salvarNovoBarbeiro()}
-              className="flex-1 border rounded-lg p-3"
+              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-zinc-100 placeholder:text-zinc-500"
               disabled={salvando}
             />
             <button
               onClick={salvarNovoBarbeiro}
               disabled={salvando}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              className="px-4 py-2 bg-amber-600 text-black font-semibold rounded-lg hover:bg-amber-700 disabled:opacity-50"
             >
               {salvando ? "Salvando..." : "Salvar"}
             </button>
@@ -80,19 +80,19 @@ function Barbeiros() {
                 setErroForm("");
               }}
               disabled={salvando}
-              className="px-4 py-2 border rounded-lg hover:bg-gray-100"
+              className="px-4 py-2 border border-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-800"
             >
               Cancelar
             </button>
           </div>
-          {erroForm && <p className="text-red-600 text-sm mt-2">{erroForm}</p>}
+          {erroForm && <p className="text-red-400 text-sm mt-2">{erroForm}</p>}
         </div>
       )}
 
       {carregando ? (
-        <p className="text-gray-500 py-8 text-center">Carregando barbeiros...</p>
+        <p className="text-zinc-500 py-8 text-center">Carregando barbeiros...</p>
       ) : ativos.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow p-10 text-center text-gray-500">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-10 text-center text-zinc-500">
           Nenhum barbeiro cadastrado ainda.
         </div>
       ) : (
@@ -101,7 +101,7 @@ function Barbeiros() {
             <button
               key={barbeiro.id}
               onClick={() => navigate(`/barbeiros/${barbeiro.id}`)}
-              className="bg-white rounded-2xl shadow p-6 flex flex-col items-center gap-3 hover:shadow-lg hover:-translate-y-0.5 transition"
+              className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col items-center gap-3 hover:border-amber-700/50 hover:-translate-y-0.5 transition"
             >
               <div
                 className={`w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold ${corAvatar(
@@ -110,7 +110,7 @@ function Barbeiros() {
               >
                 {iniciais(barbeiro.nome)}
               </div>
-              <span className="font-semibold text-gray-800">{barbeiro.nome}</span>
+              <span className="font-semibold text-zinc-100">{barbeiro.nome}</span>
             </button>
           ))}
         </div>

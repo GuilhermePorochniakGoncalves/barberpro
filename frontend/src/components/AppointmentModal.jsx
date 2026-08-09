@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { HORARIOS, formatarTelefone } from "../constants/schedule";
-import { useBarbeiros } from "../context/useBarbeiros";
 import { formatarDataExibicao } from "../utils/date";
 
 // `barbeiroId`/`data`: sempre fixos, vêm da agenda do dia que abriu o modal.
 // `horario`: pré-selecionado ao clicar num slot; vazio no fluxo "Novo
 // agendamento" (usuário escolhe o horário livre).
 // `agendamento`: quando presente, o modal abre em modo edição.
+// `catalogo`: itens disponíveis pra ESSE barbeiro (os próprios serviços +
+// produtos compartilhados) — vem de GET /catalogo?barbeiroId=, buscado
+// pelo componente pai (o catálogo é por-barbeiro, não dá pra vir de um
+// contexto global).
 //
 // O componente pai troca a prop `key` a cada abertura do modal, o que
 // remonta este componente e reidrata o formulário automaticamente — evita
@@ -18,10 +21,10 @@ function AppointmentModal({
   data,
   horario = "",
   agendamento = null,
+  catalogo = [],
   onSave,
   onCancelar,
 }) {
-  const { catalogo } = useBarbeiros();
   const servicos = catalogo.filter((i) => i.tipo === "servico");
 
   const modoEdicao = Boolean(agendamento);
@@ -106,13 +109,13 @@ function AppointmentModal({
   const bloqueado = salvando || cancelando;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-        <h2 className="text-2xl font-bold mb-2">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md">
+        <h2 className="text-2xl font-bold mb-2 text-white">
           {modoEdicao ? "Editar agendamento" : "Novo agendamento"}
         </h2>
 
-        <p className="text-gray-600 mb-6">
+        <p className="text-zinc-400 mb-6">
           {formatarDataExibicao(data)}
           {horarioSelecionado ? ` às ${horarioSelecionado}` : ""}
         </p>
@@ -123,7 +126,7 @@ function AppointmentModal({
             placeholder="Nome do cliente"
             value={nome}
             onChange={(e) => setNome(e.target.value)}
-            className="w-full border rounded-lg p-3"
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-zinc-100 placeholder:text-zinc-500"
             disabled={bloqueado}
           />
 
@@ -132,14 +135,14 @@ function AppointmentModal({
             placeholder="Telefone"
             value={telefone}
             onChange={(e) => setTelefone(formatarTelefone(e.target.value))}
-            className="w-full border rounded-lg p-3"
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-zinc-100 placeholder:text-zinc-500"
             disabled={bloqueado}
           />
 
           <select
             value={servico}
             onChange={(e) => setServico(e.target.value)}
-            className="w-full border rounded-lg p-3"
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-zinc-100"
             disabled={bloqueado}
           >
             {servicos.length === 0 && <option value="">Nenhum serviço cadastrado</option>}
@@ -156,7 +159,7 @@ function AppointmentModal({
             <select
               value={horarioSelecionado}
               onChange={(e) => setHorarioSelecionado(e.target.value)}
-              className="w-full border rounded-lg p-3"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-zinc-100"
               disabled={bloqueado}
             >
               <option value="">Horário</option>
@@ -168,7 +171,7 @@ function AppointmentModal({
         </div>
 
         {erro && (
-          <p className="text-red-600 text-sm mt-4" role="alert">
+          <p className="text-red-400 text-sm mt-4" role="alert">
             {erro}
           </p>
         )}
@@ -178,7 +181,7 @@ function AppointmentModal({
             <button
               onClick={cancelar}
               disabled={bloqueado}
-              className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-50"
+              className="px-4 py-2 border border-red-900/50 text-red-400 rounded-lg hover:bg-red-950/30 disabled:opacity-50"
             >
               {cancelando ? "Cancelando..." : "Cancelar agendamento"}
             </button>
@@ -190,7 +193,7 @@ function AppointmentModal({
             <button
               onClick={onClose}
               disabled={bloqueado}
-              className="px-4 py-2 border rounded-lg hover:bg-gray-100 disabled:opacity-50"
+              className="px-4 py-2 border border-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-800 disabled:opacity-50"
             >
               Fechar
             </button>
@@ -198,7 +201,7 @@ function AppointmentModal({
             <button
               onClick={salvar}
               disabled={bloqueado}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              className="px-4 py-2 bg-amber-600 text-black font-semibold rounded-lg hover:bg-amber-700 disabled:opacity-50"
             >
               {salvando ? "Salvando..." : "Salvar"}
             </button>

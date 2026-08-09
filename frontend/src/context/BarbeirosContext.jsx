@@ -3,11 +3,15 @@ import api from "../services/api";
 import { BarbeirosContext } from "./barbeiros-context";
 import { extrairMensagemErro } from "../utils/erro";
 
-// Contexto de barbeiros + catálogo de serviços/produtos (usados tanto pelo
-// agendamento quanto pela tela de finalizar atendimento) + criação de vendas.
+// Contexto de barbeiros + produtos compartilhados (usados pela tela de
+// finalizar atendimento e pela gestão de estoque) + criação de vendas.
+//
+// Serviço NÃO fica aqui: cada barbeiro tem os próprios (nome+preço), então
+// a lista certa depende de qual barbeiro está sendo atendido — quem
+// precisa disso (agenda do dia) busca via GET /catalogo?barbeiroId=.
 export function BarbeirosProvider({ children }) {
   const [barbeiros, setBarbeiros] = useState([]);
-  const [catalogo, setCatalogo] = useState([]);
+  const [produtos, setProdutos] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
 
@@ -20,15 +24,15 @@ export function BarbeirosProvider({ children }) {
     setErro(null);
 
     try {
-      const [barbeirosRes, catalogoRes] = await Promise.all([
+      const [barbeirosRes, produtosRes] = await Promise.all([
         api.get("/barbeiros"),
-        api.get("/catalogo"),
+        api.get("/catalogo"), // sem barbeiroId -> só produtos compartilhados
       ]);
       setBarbeiros(barbeirosRes.data);
-      setCatalogo(catalogoRes.data);
+      setProdutos(produtosRes.data);
     } catch (error) {
       console.error(error);
-      setErro(extrairMensagemErro(error, "Não foi possível carregar barbeiros/catálogo."));
+      setErro(extrairMensagemErro(error, "Não foi possível carregar barbeiros/produtos."));
     } finally {
       setCarregando(false);
     }
@@ -80,11 +84,41 @@ export function BarbeirosProvider({ children }) {
     }
   }
 
+  async function criarProduto(dados) {
+    try {
+      const response = await api.post("/produtos", dados);
+      setProdutos((prev) => [...prev, response.data].sort((a, b) => a.nome.localeCompare(b.nome)));
+      return { sucesso: true, produto: response.data };
+    } catch (error) {
+      return { sucesso: false, mensagem: extrairMensagemErro(error, "Não foi possível cadastrar o produto.") };
+    }
+  }
+
+  async function atualizarProduto(id, dados) {
+    try {
+      const response = await api.put(`/produtos/${id}`, dados);
+      setProdutos((prev) => prev.map((p) => (p.id === id ? response.data : p)));
+      return { sucesso: true, produto: response.data };
+    } catch (error) {
+      return { sucesso: false, mensagem: extrairMensagemErro(error, "Não foi possível atualizar o produto.") };
+    }
+  }
+
+  async function removerProduto(id) {
+    try {
+      await api.delete(`/produtos/${id}`);
+      setProdutos((prev) => prev.filter((p) => p.id !== id));
+      return { sucesso: true };
+    } catch (error) {
+      return { sucesso: false, mensagem: extrairMensagemErro(error, "Não foi possível remover o produto.") };
+    }
+  }
+
   return (
     <BarbeirosContext.Provider
       value={{
         barbeiros,
-        catalogo,
+        produtos,
         carregando,
         erro,
         recarregar: carregarDados,
@@ -92,6 +126,9 @@ export function BarbeirosProvider({ children }) {
         atualizarBarbeiro,
         removerBarbeiro,
         finalizarAtendimento,
+        criarProduto,
+        atualizarProduto,
+        removerProduto,
       }}
     >
       {children}

@@ -10,7 +10,10 @@
       "Bash(node \"C:\\\\Users\\\\guico\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-guico-OneDrive-Desktop-barberpro\\\\972ac668-c68f-423c-a141-9f93333c36b7\\\\scratchpad\\\\e2e.js\")",
       "Bash(npx --yes -p playwright node \"C:\\\\Users\\\\guico\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-guico-OneDrive-Desktop-barberpro\\\\972ac668-c68f-423c-a141-9f93333c36b7\\\\scratchpad\\\\e2e.js\")",
       "Bash(cp \"C:\\\\Users\\\\guico\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-guico-OneDrive-Desktop-barberpro\\\\972ac668-c68f-423c-a141-9f93333c36b7\\\\scratchpad\\\\e2e.js\" \"c:\\\\Users\\\\guico\\\\OneDrive\\\\Desktop\\\\barberpro\\\\frontend\\\\e2e-temp.cjs\")",
-      "Bash(node e2e-temp.cjs)"
+      "Bash(node e2e-temp.cjs)",
+      "Bash(echo \"PUSH_EXIT:$?\")",
+      "Bash(timeout 20 git pull origin claude/barberpro-github-repo-6ky9e2)",
+      "Bash(node shot-theme.cjs)"
     ]
   }
 }
