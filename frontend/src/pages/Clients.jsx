@@ -19,8 +19,8 @@ function formatarReais(valor) {
 
 function formatarDataHora(valor) {
   if (!valor) return "Nunca";
-  // vem como 'YYYY-MM-DD HH:MM:SS' (UTC do SQLite)
-  return new Date(valor.replace(" ", "T") + "Z").toLocaleString("pt-BR", {
+  // Postgres/pg já devolve ISO8601 (ex.: '2026-08-10T14:30:00.000Z').
+  return new Date(valor).toLocaleString("pt-BR", {
     dateStyle: "short",
     timeStyle: "short",
   });
