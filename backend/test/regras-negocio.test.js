@@ -85,3 +85,76 @@ test("produto: estoque insuficiente bloqueia a venda; venda ok decrementa o esto
   const atualizado = catalogo.data.find((i) => i.nome === "Cera modeladora");
   assert.equal(atualizado.estoque, 0);
 }));
+
+test("lista de espera: entrar na fila, cancelar o agendamento notifica automaticamente, e dá pra sair da fila", comServidor(async ({ req, criarBarbeiro }) => {
+  const barbeiro = await criarBarbeiro("Zaqueu");
+  await req("POST", `/barbeiros/${barbeiro.id}/servicos`, { nome: "Corte", preco: 30 });
+
+  const agendamento = await req("POST", "/agendamentos", {
+    barbeiroId: barbeiro.id,
+    nome: "Joao",
+    telefone: "11999998888",
+    servico: "Corte",
+    data: "2026-08-16",
+    horario: "09:00",
+  });
+  assert.equal(agendamento.status, 201);
+
+  // Horário validação: telefone inválido é rejeitado.
+  const invalida = await req("POST", `/barbeiros/${barbeiro.id}/lista-espera`, {
+    nome: "Pedro",
+    telefone: "123",
+    servico: "Corte",
+    data: "2026-08-16",
+    horario: "09:00",
+  });
+  assert.equal(invalida.status, 400);
+
+  const entrada = await req("POST", `/barbeiros/${barbeiro.id}/lista-espera`, {
+    nome: "Pedro",
+    telefone: "11988887777",
+    servico: "Corte",
+    data: "2026-08-16",
+    horario: "09:00",
+  });
+  assert.equal(entrada.status, 201);
+  assert.equal(entrada.data.status, "aguardando");
+
+  const lista = await req("GET", `/barbeiros/${barbeiro.id}/lista-espera?data=2026-08-16`);
+  assert.equal(lista.data.length, 1);
+  assert.equal(lista.data[0].nome, "Pedro");
+
+  // Cancelar o agendamento original libera o slot e notifica quem espera.
+  const cancelado = await req("DELETE", `/agendamentos/${agendamento.data.id}`);
+  assert.equal(cancelado.status, 200);
+  assert.equal(cancelado.data.notificadosListaEspera, 1);
+
+  const listaAtualizada = await req("GET", `/barbeiros/${barbeiro.id}/lista-espera?data=2026-08-16`);
+  assert.equal(listaAtualizada.data[0].status, "notificado");
+  assert.ok(listaAtualizada.data[0].notificado_em);
+
+  // Sair da lista de espera (ex.: já foi atendido, ou desistiu).
+  const removido = await req("DELETE", `/barbeiros/${barbeiro.id}/lista-espera/${entrada.data.id}`);
+  assert.equal(removido.status, 204);
+
+  const listaVazia = await req("GET", `/barbeiros/${barbeiro.id}/lista-espera?data=2026-08-16`);
+  assert.equal(listaVazia.data.length, 0);
+}));
+
+test("lista de espera: cancelar horário sem ninguém esperando notifica zero", comServidor(async ({ req, criarBarbeiro }) => {
+  const barbeiro = await criarBarbeiro("Zaqueu");
+  await req("POST", `/barbeiros/${barbeiro.id}/servicos`, { nome: "Corte", preco: 30 });
+
+  const agendamento = await req("POST", "/agendamentos", {
+    barbeiroId: barbeiro.id,
+    nome: "Joao",
+    telefone: "11999998888",
+    servico: "Corte",
+    data: "2026-08-17",
+    horario: "09:00",
+  });
+
+  const cancelado = await req("DELETE", `/agendamentos/${agendamento.data.id}`);
+  assert.equal(cancelado.status, 200);
+  assert.equal(cancelado.data.notificadosListaEspera, 0);
+}));

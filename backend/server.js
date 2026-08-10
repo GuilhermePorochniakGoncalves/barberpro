@@ -17,6 +17,7 @@ const {
   validarServico,
   validarProduto,
   validarBloqueio,
+  validarListaEspera,
 } = require("./validation");
 
 const app = express();
@@ -308,6 +309,61 @@ app.delete("/barbeiros/:id/bloqueios/:bloqueioId", (req, res) => {
   res.status(204).send();
 });
 
+// ---------- Lista de espera ----------
+
+app.get("/barbeiros/:id/lista-espera", (req, res) => {
+  const barbeiroId = Number(req.params.id);
+  const { data, status } = req.query;
+
+  const condicoes = ["barbeiro_id = ?"];
+  const params = [barbeiroId];
+
+  if (data) {
+    condicoes.push("data = ?");
+    params.push(data);
+  }
+  if (status) {
+    condicoes.push("status = ?");
+    params.push(status);
+  }
+
+  const entradas = db
+    .prepare(`SELECT * FROM lista_espera WHERE ${condicoes.join(" AND ")} ORDER BY criado_em`)
+    .all(...params);
+
+  res.json(entradas);
+});
+
+app.post("/barbeiros/:id/lista-espera", (req, res) => {
+  const barbeiroId = Number(req.params.id);
+  const barbeiro = db.prepare("SELECT * FROM barbeiros WHERE id = ?").get(barbeiroId);
+  if (!barbeiro) return res.status(404).json({ erro: "Barbeiro não encontrado." });
+
+  const { errors, valido, data } = validarListaEspera(req.body);
+  if (!valido) return res.status(400).json({ erros: errors });
+
+  const info = db
+    .prepare(
+      `INSERT INTO lista_espera (barbeiro_id, nome, telefone, servico, data, horario)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(barbeiroId, data.nome, data.telefone, data.servico, data.data, data.horario);
+
+  res.status(201).json(db.prepare("SELECT * FROM lista_espera WHERE id = ?").get(info.lastInsertRowid));
+});
+
+app.delete("/barbeiros/:id/lista-espera/:entradaId", (req, res) => {
+  const barbeiroId = Number(req.params.id);
+
+  const entrada = db
+    .prepare("SELECT * FROM lista_espera WHERE id = ? AND barbeiro_id = ?")
+    .get(Number(req.params.entradaId), barbeiroId);
+  if (!entrada) return res.status(404).json({ erro: "Registro não encontrado na lista de espera." });
+
+  db.prepare("DELETE FROM lista_espera WHERE id = ?").run(entrada.id);
+  res.status(204).send();
+});
+
 // ---------- Clientes ----------
 
 app.get("/clientes", (req, res) => {
@@ -462,7 +518,24 @@ app.delete("/agendamentos/:id", (req, res) => {
   }
 
   db.prepare("DELETE FROM agendamentos WHERE id = ?").run(id);
-  res.status(204).send();
+
+  // Libera o slot — se alguém estava na lista de espera desse
+  // barbeiro/dia/horário, marca como notificado. O envio de verdade
+  // (WhatsApp) é uma integração futura; por ora só registra o estado.
+  const aguardando = db
+    .prepare(
+      "SELECT * FROM lista_espera WHERE barbeiro_id = ? AND data = ? AND horario = ? AND status = 'aguardando'"
+    )
+    .all(existente.barbeiro_id, existente.data, existente.horario);
+
+  if (aguardando.length > 0) {
+    db.prepare(
+      `UPDATE lista_espera SET status = 'notificado', notificado_em = datetime('now')
+       WHERE barbeiro_id = ? AND data = ? AND horario = ? AND status = 'aguardando'`
+    ).run(existente.barbeiro_id, existente.data, existente.horario);
+  }
+
+  res.status(200).json({ notificadosListaEspera: aguardando.length });
 });
 
 // ---------- Vendas (finalizar atendimento) ----------

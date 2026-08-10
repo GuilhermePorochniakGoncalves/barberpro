@@ -128,6 +128,25 @@ db.exec(`
   );
 `);
 
+// Lista de espera de um horário/dia lotado. Quando o agendamento daquele
+// slot é cancelado, quem está "aguardando" vira "notificado" (ver
+// DELETE /agendamentos/:id) — por ora só marca o registro; o envio real
+// (WhatsApp) fica pra uma integração futura.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS lista_espera (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    barbeiro_id INTEGER NOT NULL REFERENCES barbeiros(id),
+    nome TEXT NOT NULL,
+    telefone TEXT NOT NULL,
+    servico TEXT,
+    data TEXT NOT NULL,
+    horario TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'aguardando' CHECK (status IN ('aguardando', 'notificado', 'cancelado')),
+    criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    notificado_em TEXT
+  );
+`);
+
 // Seed de produtos compartilhados — só roda se o catálogo estiver vazio
 // (não sobrescreve edições futuras feitas via API). Serviço não é semeado:
 // cada barbeiro cadastra os próprios depois de criado.

@@ -25,17 +25,19 @@ function AgendarPublico() {
   const [servicoSelecionado, setServicoSelecionado] = useState(null);
   const [dataSelecionada, setDataSelecionada] = useState(hojeISO());
   const [horarioSelecionado, setHorarioSelecionado] = useState("");
+  const [modoListaEspera, setModoListaEspera] = useState(false);
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [agendamentoConfirmado, setAgendamentoConfirmado] = useState(null);
+  const [listaEsperaConfirmada, setListaEsperaConfirmada] = useState(null);
 
   const [servicos, setServicos] = useState([]);
   const [carregandoServicos, setCarregandoServicos] = useState(false);
 
   const barbeiro = barbeiros.find((b) => b.id === barbeiroId);
-  const { carregando: carregandoDisponibilidade, horarioLivre } = useDisponibilidade(
+  const { carregando: carregandoDisponibilidade, horarioLivre, buscarAgendamento } = useDisponibilidade(
     barbeiroId,
     etapa === "horario" ? dataSelecionada : null
   );
@@ -72,6 +74,13 @@ function AgendarPublico() {
 
   function escolherHorario(horario) {
     setHorarioSelecionado(horario);
+    setModoListaEspera(false);
+    setEtapa("dados");
+  }
+
+  function escolherHorarioOcupado(horario) {
+    setHorarioSelecionado(horario);
+    setModoListaEspera(true);
     setEtapa("dados");
   }
 
@@ -90,22 +99,35 @@ function AgendarPublico() {
 
     setErro("");
     setEnviando(true);
+
+    const dadosComuns = {
+      nome: nome.trim(),
+      telefone: digitos,
+      servico: servicoSelecionado,
+      data: dataSelecionada,
+      horario: horarioSelecionado,
+    };
+
     try {
-      const response = await api.post("/agendamentos", {
-        barbeiroId,
-        nome: nome.trim(),
-        telefone: digitos,
-        servico: servicoSelecionado,
-        data: dataSelecionada,
-        horario: horarioSelecionado,
-      });
-      setAgendamentoConfirmado(response.data);
-      setEtapa("sucesso");
+      if (modoListaEspera) {
+        const response = await api.post(`/barbeiros/${barbeiroId}/lista-espera`, dadosComuns);
+        setListaEsperaConfirmada(response.data);
+        setEtapa("sucesso-espera");
+      } else {
+        const response = await api.post("/agendamentos", { barbeiroId, ...dadosComuns });
+        setAgendamentoConfirmado(response.data);
+        setEtapa("sucesso");
+      }
     } catch (error) {
-      // Horário pode ter sido preenchido por outra pessoa entre a escolha
-      // e a confirmação — manda de volta pra escolha de horário.
-      setErro(extrairMensagemErro(error, "Não foi possível confirmar o agendamento."));
-      setEtapa("horario");
+      if (!modoListaEspera && error.response?.status === 409) {
+        // Horário foi preenchido por outra pessoa entre a escolha e a
+        // confirmação — oferece entrar na lista de espera no lugar, sem
+        // precisar preencher os dados de novo.
+        setModoListaEspera(true);
+        setErro("Ih, esse horário acabou de ser ocupado. Quer entrar na lista de espera dele?");
+      } else {
+        setErro(extrairMensagemErro(error, "Não foi possível confirmar."));
+      }
     } finally {
       setEnviando(false);
     }
@@ -117,10 +139,12 @@ function AgendarPublico() {
     setServicoSelecionado(null);
     setDataSelecionada(hojeISO());
     setHorarioSelecionado("");
+    setModoListaEspera(false);
     setNome("");
     setTelefone("");
     setErro("");
     setAgendamentoConfirmado(null);
+    setListaEsperaConfirmada(null);
   }
 
   const etapas = ["barbeiro", "servico", "horario", "dados"];
@@ -132,7 +156,7 @@ function AgendarPublico() {
       <p className="text-zinc-400 mb-8">Agende seu horário</p>
 
       <div className="w-full max-w-lg">
-        {etapa !== "sucesso" && (
+        {etapa !== "sucesso" && etapa !== "sucesso-espera" && (
           <div className="flex items-center justify-center gap-2 mb-8">
             {["Barbeiro", "Serviço", "Horário", "Seus dados"].map((rotulo, i) => (
               <div key={rotulo} className="flex items-center gap-2">
@@ -254,25 +278,53 @@ function AgendarPublico() {
               {carregandoDisponibilidade ? (
                 <p className="text-zinc-500 text-center py-6">Carregando horários...</p>
               ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  {HORARIOS.map((h) => {
-                    const livre = horarioLivre(h);
-                    return (
-                      <button
-                        key={h}
-                        onClick={() => livre && escolherHorario(h)}
-                        disabled={!livre}
-                        className={`py-3 rounded-lg text-sm font-medium ${
-                          livre
-                            ? "bg-zinc-800 border border-zinc-700 text-zinc-100 hover:border-amber-600 hover:text-amber-500"
-                            : "bg-zinc-950 border border-zinc-900 text-zinc-700 cursor-not-allowed line-through"
-                        }`}
-                      >
-                        {h}
-                      </button>
-                    );
-                  })}
-                </div>
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    {HORARIOS.map((h) => {
+                      const livre = horarioLivre(h);
+                      const ocupado = Boolean(buscarAgendamento(h));
+
+                      if (livre) {
+                        return (
+                          <button
+                            key={h}
+                            onClick={() => escolherHorario(h)}
+                            className="py-3 rounded-lg text-sm font-medium bg-zinc-800 border border-zinc-700 text-zinc-100 hover:border-amber-600 hover:text-amber-500"
+                          >
+                            {h}
+                          </button>
+                        );
+                      }
+
+                      if (ocupado) {
+                        return (
+                          <button
+                            key={h}
+                            onClick={() => escolherHorarioOcupado(h)}
+                            className="py-2 rounded-lg text-sm font-medium bg-zinc-950 border border-zinc-800 text-zinc-600 hover:border-red-900/50 hover:text-red-400 leading-tight"
+                          >
+                            <span className="line-through">{h}</span>
+                            <br />
+                            <span className="text-[10px] normal-case">lista de espera</span>
+                          </button>
+                        );
+                      }
+
+                      return (
+                        <button
+                          key={h}
+                          disabled
+                          className="py-3 rounded-lg text-sm font-medium bg-zinc-950 border border-zinc-900 text-zinc-800 cursor-not-allowed line-through"
+                        >
+                          {h}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-3">
+                    Horários riscados já têm alguém marcado — clique neles pra entrar na lista de espera.
+                  </p>
+                </>
               )}
             </>
           )}
@@ -286,10 +338,17 @@ function AgendarPublico() {
               >
                 ← Trocar horário
               </button>
-              <h2 className="text-xl font-bold text-white mb-1">Seus dados</h2>
+              <h2 className="text-xl font-bold text-white mb-1">
+                {modoListaEspera ? "Entrar na lista de espera" : "Seus dados"}
+              </h2>
               <p className="text-zinc-400 text-sm mb-4">
                 {barbeiro?.nome} • {servicoSelecionado} • {formatarDataExibicao(dataSelecionada)} às {horarioSelecionado}
               </p>
+              {modoListaEspera && (
+                <p className="text-xs text-amber-500 bg-amber-950/20 border border-amber-900/30 rounded-lg p-3 mb-4">
+                  Esse horário já está ocupado. Deixe seus dados e a gente avisa se abrir uma vaga.
+                </p>
+              )}
 
               <div className="space-y-3">
                 <input
@@ -316,7 +375,11 @@ function AgendarPublico() {
                 disabled={enviando}
                 className="w-full mt-5 bg-amber-600 text-black font-semibold py-3 rounded-lg hover:bg-amber-700 disabled:opacity-50"
               >
-                {enviando ? "Confirmando..." : "Confirmar agendamento"}
+                {enviando
+                  ? "Confirmando..."
+                  : modoListaEspera
+                    ? "Entrar na lista de espera"
+                    : "Confirmar agendamento"}
               </button>
             </form>
           )}
@@ -342,6 +405,41 @@ function AgendarPublico() {
                 </p>
                 <p className="text-zinc-300">
                   <span className="text-zinc-500">Nome:</span> {agendamentoConfirmado.nome}
+                </p>
+              </div>
+
+              <button
+                onClick={recomecar}
+                className="text-amber-500 hover:text-amber-400 font-medium"
+              >
+                Fazer outro agendamento
+              </button>
+            </div>
+          )}
+
+          {etapa === "sucesso-espera" && listaEsperaConfirmada && (
+            <div className="text-center py-4">
+              <div className="w-16 h-16 rounded-full bg-amber-600 text-black flex items-center justify-center text-3xl mx-auto mb-4">
+                🔔
+              </div>
+              <h2 className="text-xl font-bold text-white mb-1">Você está na lista de espera!</h2>
+              <p className="text-zinc-400 mb-6">
+                Se esse horário abrir, a barbearia vai te avisar.
+              </p>
+
+              <div className="bg-zinc-800 rounded-xl p-4 text-left space-y-2 mb-6">
+                <p className="text-zinc-300">
+                  <span className="text-zinc-500">Barbeiro:</span> {barbeiro?.nome}
+                </p>
+                <p className="text-zinc-300">
+                  <span className="text-zinc-500">Serviço:</span> {listaEsperaConfirmada.servico}
+                </p>
+                <p className="text-zinc-300">
+                  <span className="text-zinc-500">Quando:</span> {formatarDataExibicao(listaEsperaConfirmada.data)} às{" "}
+                  {listaEsperaConfirmada.horario}
+                </p>
+                <p className="text-zinc-300">
+                  <span className="text-zinc-500">Nome:</span> {listaEsperaConfirmada.nome}
                 </p>
               </div>
 

@@ -168,7 +168,8 @@ test("agendamento: editar move de horário sem conflito, e cancelar remove", com
   assert.equal(editado.data.horario, "11:00");
 
   const cancelado = await req("DELETE", `/agendamentos/${criado.data.id}`);
-  assert.equal(cancelado.status, 204);
+  assert.equal(cancelado.status, 200);
+  assert.equal(cancelado.data.notificadosListaEspera, 0);
 
   const listaVazia = await req("GET", `/agendamentos?barbeiroId=${barbeiro.id}&data=2026-08-11`);
   assert.equal(listaVazia.data.length, 0);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Layout from "../components/Layout";
 import AppointmentModal from "../components/AppointmentModal";
@@ -6,6 +6,7 @@ import FinalizarAtendimentoModal from "../components/FinalizarAtendimentoModal";
 import { SkeletonList } from "../components/Skeleton";
 import api from "../services/api";
 import { useBarbeiros } from "../context/useBarbeiros";
+import { useToast } from "../context/useToast";
 import { useDisponibilidade } from "../hooks/useDisponibilidade";
 import { HORARIOS } from "../constants/schedule";
 import { adicionarDias, ehHoje, formatarDataExibicao, hojeISO } from "../utils/date";
@@ -22,10 +23,13 @@ function BarbeiroAgenda() {
 
   const { barbeiros, carregando: carregandoBarbeiros } = useBarbeiros();
   const barbeiro = barbeiros.find((b) => b.id === barbeiroId);
+  const { mostrarToast } = useToast();
 
   const [dataSelecionada, setDataSelecionada] = useState(hojeISO());
   const [catalogo, setCatalogo] = useState([]);
   const [carregandoCatalogo, setCarregandoCatalogo] = useState(true);
+  const [listaEspera, setListaEspera] = useState([]);
+  const [horarioExpandido, setHorarioExpandido] = useState(null);
   const [erroAcao, setErroAcao] = useState(null);
 
   const {
@@ -49,10 +53,14 @@ function BarbeiroAgenda() {
   const [agendamentoParaFinalizar, setAgendamentoParaFinalizar] = useState(null);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/immutability
     carregarCatalogo();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [barbeiroId]);
+
+  useEffect(() => {
+    carregarListaEspera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [barbeiroId, dataSelecionada]);
 
   async function carregarCatalogo() {
     setCarregandoCatalogo(true);
@@ -63,6 +71,31 @@ function BarbeiroAgenda() {
       setErroAcao(extrairMensagemErro(error, "Não foi possível carregar o catálogo."));
     } finally {
       setCarregandoCatalogo(false);
+    }
+  }
+
+  async function carregarListaEspera() {
+    try {
+      const response = await api.get(`/barbeiros/${barbeiroId}/lista-espera`, {
+        params: { data: dataSelecionada },
+      });
+      setListaEspera(response.data.filter((e) => e.status !== "cancelado"));
+    } catch {
+      // Não é crítico pra agenda funcionar — falha silenciosa aqui, o erro
+      // de disponibilidade já aparece pra quem está usando a tela.
+    }
+  }
+
+  function listaEsperaDoHorario(horario) {
+    return listaEspera.filter((e) => e.horario === horario);
+  }
+
+  async function removerDaListaEspera(entradaId) {
+    try {
+      await api.delete(`/barbeiros/${barbeiroId}/lista-espera/${entradaId}`);
+      await carregarListaEspera();
+    } catch (error) {
+      setErroAcao(extrairMensagemErro(error, "Não foi possível remover da lista de espera."));
     }
   }
 
@@ -104,8 +137,19 @@ function BarbeiroAgenda() {
 
   async function cancelarAgendamento(agendamentoId) {
     try {
-      await api.delete(`/agendamentos/${agendamentoId}`);
-      await recarregarDisponibilidade();
+      const response = await api.delete(`/agendamentos/${agendamentoId}`);
+      await Promise.all([recarregarDisponibilidade(), carregarListaEspera()]);
+
+      const notificados = response.data?.notificadosListaEspera ?? 0;
+      if (notificados > 0) {
+        mostrarToast(
+          notificados === 1
+            ? "1 pessoa da lista de espera foi notificada que esse horário abriu."
+            : `${notificados} pessoas da lista de espera foram notificadas que esse horário abriu.`,
+          "aviso"
+        );
+      }
+
       return { sucesso: true };
     } catch (error) {
       return {
@@ -278,10 +322,11 @@ function BarbeiroAgenda() {
               const concluido = agendamento?.status === "concluido";
               const bloqueioEspecifico = bloqueioDoHorario(horario);
               const bloqueado = Boolean(diaInteiroBloqueado || bloqueioEspecifico);
+              const espera = listaEsperaDoHorario(horario);
 
               return (
+                <Fragment key={horario}>
                 <div
-                  key={horario}
                   className={`flex flex-wrap items-center gap-3 rounded-xl border p-3 ${
                     agendamento
                       ? concluido
@@ -352,7 +397,38 @@ function BarbeiroAgenda() {
                       </button>
                     </div>
                   )}
+
+                  {espera.length > 0 && (
+                    <button
+                      onClick={() => setHorarioExpandido(horarioExpandido === horario ? null : horario)}
+                      className="text-xs text-amber-500 hover:text-amber-400 bg-amber-950/20 border border-amber-900/30 rounded-full px-2 py-1 whitespace-nowrap"
+                    >
+                      🔔 {espera.length} na espera
+                    </button>
+                  )}
                 </div>
+
+                {horarioExpandido === horario && espera.length > 0 && (
+                  <div className="ml-14 -mt-1 mb-1 bg-zinc-950/60 border border-zinc-800 rounded-lg p-3 space-y-2">
+                    {espera.map((entrada) => (
+                      <div key={entrada.id} className="flex items-center justify-between text-sm">
+                        <span className="text-zinc-300">
+                          {entrada.nome} • {entrada.telefone}
+                          {entrada.status === "notificado" && (
+                            <span className="text-amber-500 ml-2">notificado</span>
+                          )}
+                        </span>
+                        <button
+                          onClick={() => removerDaListaEspera(entrada.id)}
+                          className="text-zinc-600 hover:text-red-400 text-xs"
+                        >
+                          remover
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                </Fragment>
               );
             })}
           </div>

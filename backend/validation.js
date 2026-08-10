@@ -207,6 +207,30 @@ function validarBloqueio(body = {}) {
   return { errors, valido: errors.length === 0, data: { data, horario } };
 }
 
+// Entrar na lista de espera de um horário/dia lotado. `servico` é só
+// informativo (não trava contra o catálogo — o cliente pode nem ter
+// escolhido um serviço específico ainda).
+function validarListaEspera(body = {}) {
+  const errors = [];
+
+  const nome = String(body.nome ?? "").trim();
+  const telefone = String(body.telefone ?? "").replace(/\D/g, "");
+  const servico = body.servico ? String(body.servico).trim() : null;
+  const data = String(body.data ?? "").trim();
+  const horario = String(body.horario ?? "").trim();
+
+  if (!nome) errors.push("Nome é obrigatório.");
+  if (!telefone || telefone.length < 10 || telefone.length > 11) {
+    errors.push("Telefone inválido. Informe DDD + número (10 ou 11 dígitos).");
+  }
+  if (!dataValida(data)) errors.push("Data inválida. Use o formato AAAA-MM-DD.");
+  if (!HORARIOS_VALIDOS.includes(horario)) {
+    errors.push(`Horário inválido. Opções válidas: ${HORARIOS_VALIDOS.join(", ")}.`);
+  }
+
+  return { errors, valido: errors.length === 0, data: { nome, telefone, servico, data, horario } };
+}
+
 module.exports = {
   HORARIOS_VALIDOS,
   FORMAS_PAGAMENTO_VALIDAS,
@@ -218,4 +242,5 @@ module.exports = {
   validarServico,
   validarProduto,
   validarBloqueio,
+  validarListaEspera,
 };
