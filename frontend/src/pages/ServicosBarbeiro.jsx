@@ -130,7 +130,7 @@ function ServicosBarbeiro() {
     <Layout>
       <div className="flex items-center gap-3 mb-1">
         <button
-          onClick={() => navigate(`/barbeiros/${barbeiroId}`)}
+          onClick={() => navigate(`/agenda?barbeiro=${barbeiroId}`)}
           className="text-zinc-500 hover:text-zinc-300"
           aria-label="Voltar pra agenda"
         >

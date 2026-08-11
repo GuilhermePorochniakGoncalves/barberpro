@@ -1,11 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
 
-function Sidebar({ aberta = false, onFechar }) {
+function Sidebar({ aberta = false, onFechar, atalhosAbertos = false, onAlternarAtalhos }) {
   const location = useLocation();
 
   const menus = [
     { nome: "Dashboard", caminho: "/" },
     { nome: "Barbeiros", caminho: "/barbeiros" },
+    { nome: "Agenda", caminho: "/agenda" },
     { nome: "Produtos", caminho: "/produtos" },
     { nome: "Clientes", caminho: "/clientes" },
     { nome: "Relatórios", caminho: "/relatorios" },
@@ -28,9 +29,26 @@ function Sidebar({ aberta = false, onFechar }) {
         }`}
       >
         <div className="flex items-center justify-between mb-10">
-          <h1 className="text-3xl font-bold text-amber-500 tracking-tight">
-            BarberPro
-          </h1>
+          {/* Tesoura: atalho ADICIONAL pra grade de blocos coloridos — não
+              substitui a navegação de texto abaixo, só oferece um jeito
+              mais rápido de pular de tela. */}
+          <button
+            onClick={onAlternarAtalhos}
+            aria-expanded={atalhosAbertos}
+            className="flex items-center gap-2.5 group -ml-1 p-1 rounded-lg hover:bg-zinc-900 transition"
+          >
+            <span
+              className={`w-9 h-9 rounded-full bg-amber-600 text-black flex items-center justify-center text-base flex-shrink-0 transition-transform duration-200 ${
+                atalhosAbertos ? "rotate-90" : ""
+              }`}
+            >
+              ✂️
+            </span>
+            <span className="text-2xl font-bold text-amber-500 tracking-tight text-left">
+              BarberPro
+            </span>
+          </button>
+
           <button
             onClick={onFechar}
             className="md:hidden text-zinc-500 hover:text-zinc-300 text-2xl leading-none"

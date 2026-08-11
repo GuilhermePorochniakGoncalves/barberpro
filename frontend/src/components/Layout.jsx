@@ -1,14 +1,21 @@
 import { useState } from "react";
 import Sidebar from "./Sidebar";
+import ShortcutsPanel from "./ShortcutsPanel";
 
 function Layout({ children }) {
   const [menuAberto, setMenuAberto] = useState(false);
+  const [atalhosAbertos, setAtalhosAbertos] = useState(false);
 
   return (
     <div className="flex bg-black min-h-screen">
-      <Sidebar aberta={menuAberto} onFechar={() => setMenuAberto(false)} />
+      <Sidebar
+        aberta={menuAberto}
+        onFechar={() => setMenuAberto(false)}
+        atalhosAbertos={atalhosAbertos}
+        onAlternarAtalhos={() => setAtalhosAbertos((a) => !a)}
+      />
 
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 relative">
         {/* Barra superior só aparece em telas pequenas (celular/tablet
             estreito) — no desktop a sidebar já fica sempre visível. */}
         <div className="md:hidden flex items-center gap-3 px-4 py-4 border-b border-zinc-900">
@@ -25,6 +32,10 @@ function Layout({ children }) {
           </button>
           <span className="text-amber-500 font-bold text-lg">BarberPro</span>
         </div>
+
+        {/* Painel de atalhos coloridos — abre por cima só desta área de
+            conteúdo (a sidebar continua visível/clicável ao lado). */}
+        <ShortcutsPanel aberto={atalhosAbertos} onFechar={() => setAtalhosAbertos(false)} />
 
         <div className="p-4 sm:p-6 md:p-8">
           {children}

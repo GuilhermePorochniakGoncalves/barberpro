@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import Layout from "../components/Layout";
 import AppointmentModal from "../components/AppointmentModal";
 import FinalizarAtendimentoModal from "../components/FinalizarAtendimentoModal";
@@ -16,13 +16,35 @@ import { iniciais, corAvatar } from "../utils/avatar";
 // Sem login: qualquer um (recepção, outro barbeiro cobrindo) gerencia a
 // agenda de qualquer barbeiro — reflete como a barbearia funciona na
 // prática (um barbeiro livre atende o cliente de outro que está ocupado).
-function BarbeiroAgenda() {
-  const { id } = useParams();
-  const barbeiroId = Number(id);
+//
+// Rota única /agenda (em vez de /barbeiros/:id) — o barbeiro selecionado
+// vira uma aba clicável no topo, trocada no cliente sem navegar de
+// verdade. Guardamos a escolha em ?barbeiro= na querystring (não só em
+// estado local) pra manter o link compartilhável/atualizável.
+function Agenda() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const { barbeiros, carregando: carregandoBarbeiros } = useBarbeiros();
-  const barbeiro = barbeiros.find((b) => b.id === barbeiroId);
+  const ativos = barbeiros.filter((b) => b.ativo);
+
+  const barbeiroIdParam = Number(searchParams.get("barbeiro"));
+  const barbeiro = ativos.find((b) => b.id === barbeiroIdParam) ?? ativos[0] ?? null;
+  const barbeiroId = barbeiro?.id ?? null;
+
+  // Sem barbeiro nenhum ainda selecionado na URL (primeira visita) mas já
+  // temos a lista carregada: fixa o primeiro ativo na querystring.
+  useEffect(() => {
+    if (!carregandoBarbeiros && barbeiroId && barbeiroIdParam !== barbeiroId) {
+      setSearchParams({ barbeiro: String(barbeiroId) }, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carregandoBarbeiros, barbeiroId]);
+
+  function selecionarBarbeiro(id) {
+    setSearchParams({ barbeiro: String(id) });
+  }
+
   const { mostrarToast } = useToast();
 
   const [dataSelecionada, setDataSelecionada] = useState(hojeISO());
@@ -52,16 +74,6 @@ function BarbeiroAgenda() {
   const [pagamentoOpen, setPagamentoOpen] = useState(false);
   const [agendamentoParaFinalizar, setAgendamentoParaFinalizar] = useState(null);
 
-  useEffect(() => {
-    carregarCatalogo();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [barbeiroId]);
-
-  useEffect(() => {
-    carregarListaEspera();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [barbeiroId, dataSelecionada]);
-
   async function carregarCatalogo() {
     setCarregandoCatalogo(true);
     try {
@@ -85,6 +97,20 @@ function BarbeiroAgenda() {
       // de disponibilidade já aparece pra quem está usando a tela.
     }
   }
+
+  useEffect(() => {
+    if (!barbeiroId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carrega dados externos ao trocar de barbeiro, não deriva estado local
+    carregarCatalogo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [barbeiroId]);
+
+  useEffect(() => {
+    if (!barbeiroId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carrega dados externos ao trocar de barbeiro/dia, não deriva estado local
+    carregarListaEspera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [barbeiroId, dataSelecionada]);
 
   function listaEsperaDoHorario(horario) {
     return listaEspera.filter((e) => e.horario === horario);
@@ -197,13 +223,13 @@ function BarbeiroAgenda() {
     await recarregarDisponibilidade();
   }
 
-  if (!carregandoBarbeiros && !barbeiro) {
+  if (!carregandoBarbeiros && ativos.length === 0) {
     return (
       <Layout>
         <p className="text-zinc-400">
-          Barbeiro não encontrado.{" "}
+          Nenhum barbeiro ativo cadastrado ainda.{" "}
           <button className="text-amber-500 hover:text-amber-400 underline" onClick={() => navigate("/barbeiros")}>
-            Voltar
+            Cadastrar barbeiro
           </button>
         </p>
       </Layout>
@@ -212,44 +238,54 @@ function BarbeiroAgenda() {
 
   return (
     <Layout>
-      <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate("/barbeiros")}
-            className="text-zinc-500 hover:text-zinc-300"
-            aria-label="Voltar"
-          >
-            ← Barbeiros
-          </button>
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <h1 className="text-3xl font-bold text-white">Agenda</h1>
 
-          {barbeiro && (
-            <div className="flex items-center gap-3">
-              <div
-                className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${corAvatar(
-                  barbeiro.nome
+        {barbeiro && (
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate(`/agendar/${barbeiroId}`)}
+              className="text-sm text-zinc-400 hover:text-zinc-200"
+            >
+              Link público de agendamento
+            </button>
+            <button
+              onClick={() => navigate(`/barbeiros/${barbeiroId}/servicos`)}
+              className="text-sm text-amber-500 hover:text-amber-400"
+            >
+              Gerenciar serviços
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Abas de barbeiro — troca a agenda exibida sem navegar de página.
+          flex-wrap em vez de scroll horizontal: em mobile as pills quebram
+          linha em vez de cortar. */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        {ativos.map((b) => {
+          const ativa = b.id === barbeiroId;
+          return (
+            <button
+              key={b.id}
+              onClick={() => selecionarBarbeiro(b.id)}
+              className={`flex items-center gap-2 pl-2 pr-4 py-2 rounded-full border text-sm font-semibold transition ${
+                ativa
+                  ? "bg-amber-600/15 border-amber-600 text-white"
+                  : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+              }`}
+            >
+              <span
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold ${corAvatar(
+                  b.nome
                 )}`}
               >
-                {iniciais(barbeiro.nome)}
-              </div>
-              <h1 className="text-2xl font-bold text-white">{barbeiro.nome}</h1>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate(`/agendar/${barbeiroId}`)}
-            className="text-sm text-zinc-400 hover:text-zinc-200"
-          >
-            Link público de agendamento
-          </button>
-          <button
-            onClick={() => navigate(`/barbeiros/${barbeiroId}/servicos`)}
-            className="text-sm text-amber-500 hover:text-amber-400"
-          >
-            Gerenciar serviços
-          </button>
-        </div>
+                {iniciais(b.nome)}
+              </span>
+              {b.nome}
+            </button>
+          );
+        })}
       </div>
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
@@ -460,4 +496,4 @@ function BarbeiroAgenda() {
   );
 }
 
-export default BarbeiroAgenda;
+export default Agenda;

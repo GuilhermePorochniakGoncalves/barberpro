@@ -54,10 +54,10 @@ function Dashboard() {
           </p>
         </div>
         <button
-          onClick={() => navigate("/barbeiros")}
+          onClick={() => navigate("/agenda")}
           className="bg-amber-600 text-black font-semibold px-5 py-3 rounded-xl hover:bg-amber-700"
         >
-          Ver barbeiros
+          Ver agenda
         </button>
       </div>
     </Layout>
