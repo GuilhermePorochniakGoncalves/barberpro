@@ -701,6 +701,55 @@ app.get("/relatorios/mensal", async (req, res) => {
   });
 });
 
+// Fechamento de caixa de um dia: total arrecadado, separado por produto vs
+// serviço (soma dos itens de venda, não do valor_total da venda inteira —
+// uma venda pode misturar os dois), e por forma de pagamento. Reaproveita a
+// mesma tabela `vendas`/`venda_itens` do relatório mensal, só filtrando por
+// um dia em vez do mês inteiro.
+app.get("/relatorios/diario", async (req, res) => {
+  const data = req.query.data || new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+
+  const totais = await db.one(
+    `SELECT COUNT(*) AS atendimentos, COALESCE(SUM(valor_total), 0) AS "totalArrecadado"
+     FROM vendas WHERE criado_em::date = $1::date`,
+    [data]
+  );
+
+  const porTipoRows = await db.many(
+    `SELECT vi.tipo, COALESCE(SUM(vi.preco * vi.quantidade), 0) AS total
+     FROM venda_itens vi
+     JOIN vendas v ON v.id = vi.venda_id
+     WHERE v.criado_em::date = $1::date
+     GROUP BY vi.tipo`,
+    [data]
+  );
+  const porTipo = { servico: 0, produto: 0 };
+  for (const row of porTipoRows) {
+    porTipo[row.tipo] = Number(row.total);
+  }
+
+  const porFormaPagamento = await db.many(
+    `SELECT forma_pagamento AS "formaPagamento", COUNT(*) AS quantidade, COALESCE(SUM(valor_total), 0) AS total
+     FROM vendas
+     WHERE criado_em::date = $1::date
+     GROUP BY forma_pagamento
+     ORDER BY quantidade DESC`,
+    [data]
+  );
+
+  res.json({
+    data,
+    atendimentos: Number(totais.atendimentos),
+    totalArrecadado: Number(totais.totalArrecadado),
+    porTipo,
+    porFormaPagamento: porFormaPagamento.map((f) => ({
+      ...f,
+      quantidade: Number(f.quantidade),
+      total: Number(f.total),
+    })),
+  });
+});
+
 // ---------- Utilidades ----------
 
 app.get("/health", (req, res) => {

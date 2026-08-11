@@ -141,6 +141,56 @@ test("lista de espera: entrar na fila, cancelar o agendamento notifica automatic
   assert.equal(listaVazia.data.length, 0);
 }));
 
+test("fechamento do dia: agrega total por tipo de item e por forma de pagamento", comServidor(async ({ req, criarBarbeiro }) => {
+  const barbeiro = await criarBarbeiro("Zaqueu");
+  await req("POST", `/barbeiros/${barbeiro.id}/servicos`, { nome: "Corte", preco: 50 });
+  await req("POST", "/produtos", { nome: "Pomada", preco: 30, estoque: 10 });
+
+  const agendamento = await req("POST", "/agendamentos", {
+    barbeiroId: barbeiro.id,
+    nome: "Cliente",
+    telefone: "11999998888",
+    servico: "Corte",
+    data: "2026-08-18",
+    horario: "09:00",
+  });
+
+  const venda = await req("POST", "/vendas", {
+    agendamentoId: agendamento.data.id,
+    formaPagamento: "pix",
+    itens: [{ nome: "Corte", quantidade: 1 }, { nome: "Pomada", quantidade: 2 }],
+  });
+  assert.equal(venda.status, 201);
+  assert.equal(venda.data.valor_total, 50 + 30 * 2);
+
+  // O banco em memória é compartilhado por todos os testes deste arquivo
+  // (cada um sobe seu próprio servidor, mas na mesma instância de pg-mem),
+  // e `criado_em` da venda é sempre "agora" — então outros testes que
+  // também vendem algo "hoje" contribuem pro mesmo dia. Por isso os
+  // asserts abaixo checam "pelo menos essa venda está contabilizada", não
+  // o total exato do dia.
+  const hoje = new Date().toISOString().slice(0, 10);
+  const relatorio = await req("GET", `/relatorios/diario?data=${hoje}`);
+  assert.equal(relatorio.status, 200);
+  assert.ok(relatorio.data.atendimentos >= 1);
+  assert.ok(relatorio.data.totalArrecadado >= 50 + 30 * 2);
+  assert.ok(relatorio.data.porTipo.servico >= 50);
+  assert.ok(relatorio.data.porTipo.produto >= 60);
+  const pix = relatorio.data.porFormaPagamento.find((f) => f.formaPagamento === "pix");
+  assert.ok(pix, "deve ter um grupo de pagamento 'pix'");
+  assert.ok(pix.total >= 110);
+}));
+
+test("fechamento do dia: dia sem nenhuma venda vem zerado, não dá erro", comServidor(async ({ req }) => {
+  const relatorio = await req("GET", "/relatorios/diario?data=2020-01-01");
+  assert.equal(relatorio.status, 200);
+  assert.equal(relatorio.data.atendimentos, 0);
+  assert.equal(relatorio.data.totalArrecadado, 0);
+  assert.equal(relatorio.data.porTipo.servico, 0);
+  assert.equal(relatorio.data.porTipo.produto, 0);
+  assert.equal(relatorio.data.porFormaPagamento.length, 0);
+}));
+
 test("lista de espera: cancelar horário sem ninguém esperando notifica zero", comServidor(async ({ req, criarBarbeiro }) => {
   const barbeiro = await criarBarbeiro("Zaqueu");
   await req("POST", `/barbeiros/${barbeiro.id}/servicos`, { nome: "Corte", preco: 30 });
