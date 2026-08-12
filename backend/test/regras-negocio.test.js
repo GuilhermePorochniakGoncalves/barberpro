@@ -191,6 +191,54 @@ test("fechamento do dia: dia sem nenhuma venda vem zerado, não dá erro", comSe
   assert.equal(relatorio.data.porFormaPagamento.length, 0);
 }));
 
+test("cliente: observações são salvas, editáveis via PUT, e aparecem junto do agendamento na agenda", comServidor(async ({ req, criarBarbeiro }) => {
+  const barbeiro = await criarBarbeiro("Zaqueu");
+  await req("POST", `/barbeiros/${barbeiro.id}/servicos`, { nome: "Corte", preco: 30 });
+
+  const criado = await req("POST", "/clientes", {
+    nome: "Rafael Costa",
+    telefone: "11977776666",
+    observacoes: "Alérgico a produto X",
+  });
+  assert.equal(criado.status, 201);
+  assert.equal(criado.data.observacoes, "Alérgico a produto X");
+
+  const editado = await req("PUT", `/clientes/${criado.data.id}`, {
+    nome: "Rafael Costa",
+    telefone: "11977776666",
+    observacoes: "Gosta de degradê baixo",
+  });
+  assert.equal(editado.status, 200);
+  assert.equal(editado.data.observacoes, "Gosta de degradê baixo");
+
+  // Observação vazia limpa o campo (vira null, não string vazia).
+  const limpo = await req("PUT", `/clientes/${criado.data.id}`, {
+    nome: "Rafael Costa",
+    telefone: "11977776666",
+    observacoes: "",
+  });
+  assert.equal(limpo.data.observacoes, null);
+
+  await req("PUT", `/clientes/${criado.data.id}`, {
+    nome: "Rafael Costa",
+    telefone: "11977776666",
+    observacoes: "Prefere máquina 2",
+  });
+
+  const agendamento = await req("POST", "/agendamentos", {
+    barbeiroId: barbeiro.id,
+    nome: "Rafael Costa",
+    telefone: "11977776666",
+    servico: "Corte",
+    data: "2026-08-19",
+    horario: "09:00",
+  });
+  assert.equal(agendamento.status, 201);
+
+  const lista = await req("GET", `/agendamentos?barbeiroId=${barbeiro.id}&data=2026-08-19`);
+  assert.equal(lista.data[0].cliente_observacoes, "Prefere máquina 2");
+}));
+
 test("lista de espera: cancelar horário sem ninguém esperando notifica zero", comServidor(async ({ req, criarBarbeiro }) => {
   const barbeiro = await criarBarbeiro("Zaqueu");
   await req("POST", `/barbeiros/${barbeiro.id}/servicos`, { nome: "Corte", preco: 30 });

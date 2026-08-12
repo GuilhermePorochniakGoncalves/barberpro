@@ -76,21 +76,30 @@ function validarAgendamento(body = {}, servicosValidos = []) {
   };
 }
 
+const OBSERVACOES_MAX = 500;
+
+// `observacoes`: texto livre opcional (preferências/alergias/observações
+// do cliente — ex.: "gosta de degradê baixo", "alérgico a produto X").
+// String vazia vira `null` (sem observação), não fica salvando "".
 function validarCliente(body = {}) {
   const errors = [];
 
   const nome = String(body.nome ?? "").trim();
   const telefone = String(body.telefone ?? "").replace(/\D/g, "");
+  const observacoesBrutas = String(body.observacoes ?? "").trim();
 
   if (!nome) errors.push("Nome é obrigatório.");
   if (!telefone || telefone.length < 10 || telefone.length > 11) {
     errors.push("Telefone inválido. Informe DDD + número (10 ou 11 dígitos).");
   }
+  if (observacoesBrutas.length > OBSERVACOES_MAX) {
+    errors.push(`Observações muito longas (máximo ${OBSERVACOES_MAX} caracteres).`);
+  }
 
   return {
     errors,
     valido: errors.length === 0,
-    data: { nome, telefone },
+    data: { nome, telefone, observacoes: observacoesBrutas || null },
   };
 }
 

@@ -366,10 +366,10 @@ app.delete("/barbeiros/:id/lista-espera/:entradaId", async (req, res) => {
 
 app.get("/clientes", async (req, res) => {
   const clientes = await db.many(`
-    SELECT c.id, c.nome, c.telefone, MAX(v.criado_em) AS ultimo_atendimento
+    SELECT c.id, c.nome, c.telefone, c.observacoes, MAX(v.criado_em) AS ultimo_atendimento
     FROM clientes c
     LEFT JOIN vendas v ON v.cliente_telefone = c.telefone
-    GROUP BY c.id, c.nome, c.telefone
+    GROUP BY c.id, c.nome, c.telefone, c.observacoes
     ORDER BY c.nome
   `);
   res.json(clientes);
@@ -401,12 +401,53 @@ app.post("/clientes", async (req, res) => {
     return res.status(409).json({ erro: "Já existe um cliente com esse telefone." });
   }
 
-  const cliente = await db.one("INSERT INTO clientes (nome, telefone) VALUES ($1, $2) RETURNING *", [
-    data.nome,
-    data.telefone,
-  ]);
+  const cliente = await db.one(
+    "INSERT INTO clientes (nome, telefone, observacoes) VALUES ($1, $2, $3) RETURNING *",
+    [data.nome, data.telefone, data.observacoes]
+  );
 
   res.status(201).json(cliente);
+});
+
+app.put("/clientes/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  const existente = await db.one("SELECT * FROM clientes WHERE id = $1", [id]);
+  if (!existente) return res.status(404).json({ erro: "Cliente não encontrado." });
+
+  // Reaproveita validarCliente inteiro (nome+telefone obrigatórios) — na
+  // prática esta rota hoje só é usada pra editar observações, mas manda
+  // nome/telefone atuais junto pra não exigir um validador separado.
+  const { errors, valido, data } = validarCliente(req.body);
+  if (!valido) return res.status(400).json({ erros: errors });
+
+  if (data.telefone !== existente.telefone) {
+    const outroComEsseTelefone = await db.one("SELECT id FROM clientes WHERE telefone = $1 AND id != $2", [
+      data.telefone,
+      id,
+    ]);
+    if (outroComEsseTelefone) {
+      return res.status(409).json({ erro: "Já existe outro cliente com esse telefone." });
+    }
+  }
+
+  const atualizado = await db.one(
+    "UPDATE clientes SET nome = $1, telefone = $2, observacoes = $3 WHERE id = $4 RETURNING *",
+    [data.nome, data.telefone, data.observacoes, id]
+  );
+
+  res.json(atualizado);
+});
+
+app.delete("/clientes/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  const existente = await db.one("SELECT * FROM clientes WHERE id = $1", [id]);
+  if (!existente) return res.status(404).json({ erro: "Cliente não encontrado." });
+
+  // Sem FK de vendas/agendamentos pra clientes (eles guardam nome/telefone
+  // direto, não um cliente_id) — histórico antigo continua intacto mesmo
+  // depois de remover o cadastro, só some da tela de Clientes.
+  await db.query("DELETE FROM clientes WHERE id = $1", [id]);
+  res.status(204).send();
 });
 
 // ---------- Agendamentos ----------
@@ -419,15 +460,26 @@ app.get("/agendamentos", async (req, res) => {
 
   if (barbeiroId) {
     params.push(Number(barbeiroId));
-    condicoes.push(`barbeiro_id = $${params.length}`);
+    condicoes.push(`a.barbeiro_id = $${params.length}`);
   }
   if (data) {
     params.push(data);
-    condicoes.push(`data = $${params.length}`);
+    condicoes.push(`a.data = $${params.length}`);
   }
 
   const where = condicoes.length ? `WHERE ${condicoes.join(" AND ")}` : "";
-  const agendamentos = await db.many(`SELECT * FROM agendamentos ${where} ORDER BY data, horario`, params);
+  // LEFT JOIN em clientes (por telefone, não tem FK — agendamento guarda
+  // nome/telefone direto) só pra trazer junto as observações do cliente,
+  // se existirem: a agenda mostra em destaque sem precisar de uma segunda
+  // chamada por horário.
+  const agendamentos = await db.many(
+    `SELECT a.*, c.observacoes AS cliente_observacoes
+     FROM agendamentos a
+     LEFT JOIN clientes c ON c.telefone = a.telefone
+     ${where}
+     ORDER BY a.data, a.horario`,
+    params
+  );
 
   res.json(agendamentos);
 });

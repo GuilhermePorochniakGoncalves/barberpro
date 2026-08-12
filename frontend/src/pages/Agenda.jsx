@@ -382,6 +382,9 @@ function Agenda() {
                           {agendamento.nome}
                         </p>
                         <p className="text-sm text-zinc-500">{agendamento.servico}</p>
+                        {agendamento.cliente_observacoes && (
+                          <p className="text-xs text-amber-500 mt-1">📝 {agendamento.cliente_observacoes}</p>
+                        )}
                       </div>
 
                       {concluido ? (

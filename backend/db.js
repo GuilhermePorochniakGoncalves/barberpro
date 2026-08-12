@@ -71,9 +71,14 @@ async function initSchema() {
     CREATE TABLE IF NOT EXISTS clientes (
       id SERIAL PRIMARY KEY,
       nome TEXT NOT NULL,
-      telefone TEXT NOT NULL UNIQUE
+      telefone TEXT NOT NULL UNIQUE,
+      observacoes TEXT
     );
   `);
+  // CREATE TABLE IF NOT EXISTS não adiciona coluna a uma tabela que já
+  // existia sem ela (ex.: o banco do Neon, criado antes desse campo) —
+  // ALTER idempotente cobre tanto banco novo quanto já em produção.
+  await query(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS observacoes TEXT;`);
 
   // Serviço e produto vivem na mesma tabela (mesma forma: nome+tipo+preço),
   // mas serviço pertence a um barbeiro (cada um define os próprios, com seu
