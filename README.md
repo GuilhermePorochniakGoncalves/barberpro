@@ -117,6 +117,35 @@ Agora que você tem a URL final do Netlify:
 
 Pronto: backend na Render, banco no Neon, frontend no Netlify, tudo de graça.
 
+## Backup do banco
+
+O Neon já mantém histórico próprio do banco (restauração por ponto no tempo — "Point-in-time restore" /
+"Restore" no dashboard do projeto, cobrindo as últimas horas/dias dependendo do plano). Pra um backup
+adicional, independente do Neon, tem um script manual:
+
+```
+cd backend
+npm run backup
+```
+
+Isso roda `pg_dump` contra o `DATABASE_URL` do seu `.env` e salva em `backend/backups/`, um arquivo
+`.dump` com timestamp no nome. Mantém só os 7 mais recentes — mais antigos são apagados automaticamente
+a cada execução. Requer o `pg_dump` instalado na máquina (vem com qualquer instalação do Postgres, ou
+`apt install postgresql-client` / `brew install libpq`; no Windows, instala junto com o
+[instalador oficial do Postgres](https://www.postgresql.org/download/windows/)).
+
+**Pra rodar sozinho todo dia**, sem precisar lembrar: agende o comando `npm run backup` (dentro de
+`backend/`) no Agendador de Tarefas do Windows, ou num `cron` se rodar em Linux/Mac. O Render (plano
+free) não tem disco persistente nem cron nativo, então esse agendamento é pensado pra rodar numa máquina
+sua, não no servidor — é um backup "de segurança pessoal" complementar ao do Neon, não o principal.
+
+**Pra restaurar** um `.dump` gerado pelo script:
+```
+pg_restore --clean --if-exists --dbname="SUA_DATABASE_URL_AQUI" backend/backups/barberpro-2026-08-12T....dump
+```
+⚠️ `--clean` apaga as tabelas existentes antes de recriar — só rode isso contra o banco que você
+realmente quer sobrescrever (nunca contra produção sem ter certeza).
+
 ### Se algo der errado
 
 - **Site abre mas fica em branco / erro de rede no console**: confira se `VITE_API_URL` no Netlify aponta
