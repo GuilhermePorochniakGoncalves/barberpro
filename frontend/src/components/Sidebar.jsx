@@ -45,7 +45,7 @@ function Sidebar({ aberta = false, onFechar, atalhosAbertos = false, onAlternarA
               ✂️
             </span>
             <span className="text-2xl font-bold text-amber-500 tracking-tight text-left">
-              BarberPro
+              AgendaRápido
             </span>
           </button>
 
