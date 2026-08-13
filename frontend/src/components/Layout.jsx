@@ -30,7 +30,7 @@ function Layout({ children }) {
               <line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           </button>
-          <span className="text-amber-500 font-bold text-lg">BarberPro</span>
+          <span className="text-amber-500 font-bold text-lg">AgendaRápido</span>
         </div>
 
         {/* Painel de atalhos coloridos — abre por cima só desta área de

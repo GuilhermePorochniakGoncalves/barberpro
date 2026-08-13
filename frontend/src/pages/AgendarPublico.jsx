@@ -152,7 +152,7 @@ function AgendarPublico() {
 
   return (
     <div className="min-h-screen bg-black flex flex-col items-center px-4 py-10">
-      <h1 className="text-3xl font-bold text-amber-500 mb-1">BarberPro</h1>
+      <h1 className="text-3xl font-bold text-amber-500 mb-1">AgendaRápido</h1>
       <p className="text-zinc-400 mb-8">Agende seu horário</p>
 
       <div className="w-full max-w-lg">
