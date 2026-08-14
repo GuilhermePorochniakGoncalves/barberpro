@@ -48,16 +48,19 @@ test("qualquer um cadastra serviço de qualquer barbeiro (sem login) e usa no ag
   const produto = catalogo.data.find((i) => i.tipo === "produto");
   assert.ok(produto, "catálogo com barbeiroId deve trazer produtos compartilhados também");
 
+  const total = 30 + produto.preco * 2;
   const venda = await req("POST", "/vendas", {
     agendamentoId: criado.data.id,
-    formaPagamento: "pix",
+    pagamentos: [{ formaPagamento: "pix", valor: total }],
     itens: [
       { nome: "Corte Simples", quantidade: 1 },
       { nome: produto.nome, quantidade: 2 },
     ],
   });
   assert.equal(venda.status, 201);
-  assert.equal(venda.data.valor_total, 30 + produto.preco * 2);
+  assert.equal(venda.data.valor_total, total);
+  assert.equal(venda.data.forma_pagamento, "pix");
+  assert.equal(venda.data.pagamentos.length, 1);
 
   const estoqueAtualizado = (await req("GET", `/catalogo?barbeiroId=${zaqueu.id}`)).data.find(
     (i) => i.id === produto.id
@@ -111,7 +114,7 @@ test("relatório mensal agrega faturamento por barbeiro e forma de pagamento", c
 
   await req("POST", "/vendas", {
     agendamentoId: criado.data.id,
-    formaPagamento: "dinheiro",
+    pagamentos: [{ formaPagamento: "dinheiro", valor: 40 }],
     itens: [{ nome: "Corte", quantidade: 1 }],
   });
 
@@ -142,7 +145,7 @@ test("relatório mensal agrega faturamento por barbeiro e forma de pagamento", c
   assert.ok(joao.ultimo_atendimento);
 }));
 
-test("agendamento: editar move de horário sem conflito, e cancelar remove", comServidor(async ({ req, criarBarbeiro }) => {
+test("agendamento: editar move de horário sem conflito, e cancelar vira status (não some do banco)", comServidor(async ({ req, criarBarbeiro }) => {
   const barbeiro = await criarBarbeiro("Zaqueu");
   await req("POST", `/barbeiros/${barbeiro.id}/servicos`, { nome: "Barba", preco: 25 });
 
@@ -173,4 +176,13 @@ test("agendamento: editar move de horário sem conflito, e cancelar remove", com
 
   const listaVazia = await req("GET", `/agendamentos?barbeiroId=${barbeiro.id}&data=2026-08-11`);
   assert.equal(listaVazia.data.length, 0);
+
+  // Cancelado não some — fica no banco pra histórico, só sai da agenda padrão.
+  const comCancelados = await req(
+    "GET",
+    `/agendamentos?barbeiroId=${barbeiro.id}&data=2026-08-11&incluirCancelados=true`
+  );
+  assert.equal(comCancelados.data.length, 1);
+  assert.equal(comCancelados.data[0].status, "cancelado");
+  assert.ok(comCancelados.data[0].cancelado_em);
 }));

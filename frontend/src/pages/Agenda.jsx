@@ -8,7 +8,7 @@ import api from "../services/api";
 import { useBarbeiros } from "../context/useBarbeiros";
 import { useToast } from "../context/useToast";
 import { useDisponibilidade } from "../hooks/useDisponibilidade";
-import { HORARIOS } from "../constants/schedule";
+import { HORARIOS, formatarDuracao } from "../constants/schedule";
 import { adicionarDias, ehHoje, formatarDataExibicao, hojeISO } from "../utils/date";
 import { extrairMensagemErro } from "../utils/erro";
 import { iniciais, corAvatar } from "../utils/avatar";
@@ -59,6 +59,7 @@ function Agenda() {
     erro: erroDisponibilidade,
     recarregar: recarregarDisponibilidade,
     buscarAgendamento,
+    agendamentoQueCobre,
     diaInteiroBloqueado,
     bloqueioDoHorario,
   } = useDisponibilidade(barbeiroId, dataSelecionada);
@@ -355,6 +356,26 @@ function Agenda() {
           <div className="space-y-2">
             {HORARIOS.map((horario) => {
               const agendamento = buscarAgendamento(horario);
+              // Serviço mais longo que 30min (ex.: corte+barba) ocupa mais
+              // de um slot — o slot "do meio" não tem agendamento próprio
+              // (buscarAgendamento não bate), mas está coberto por um que
+              // começou antes. Mostra só uma linha fina de continuação,
+              // sem reabrir "livre pra agendar" no meio de um atendimento.
+              const cobrindo = agendamentoQueCobre(horario);
+              const continuacao = Boolean(cobrindo) && !agendamento;
+
+              if (continuacao) {
+                return (
+                  <div
+                    key={horario}
+                    className="flex items-center gap-3 rounded-lg border border-dashed border-zinc-800/70 px-3 py-1.5"
+                  >
+                    <span className="w-14 text-xs text-zinc-600">{horario}</span>
+                    <span className="text-xs text-zinc-600">↳ continuação: {cobrindo.nome}</span>
+                  </div>
+                );
+              }
+
               const concluido = agendamento?.status === "concluido";
               const bloqueioEspecifico = bloqueioDoHorario(horario);
               const bloqueado = Boolean(diaInteiroBloqueado || bloqueioEspecifico);
@@ -381,7 +402,9 @@ function Agenda() {
                         <p className={`font-semibold ${concluido ? "text-zinc-600 line-through" : "text-zinc-100"}`}>
                           {agendamento.nome}
                         </p>
-                        <p className="text-sm text-zinc-500">{agendamento.servico}</p>
+                        <p className="text-sm text-zinc-500">
+                          {agendamento.servico} • {formatarDuracao(agendamento.duracao_minutos ?? 30)}
+                        </p>
                         {agendamento.cliente_observacoes && (
                           <p className="text-xs text-amber-500 mt-1">📝 {agendamento.cliente_observacoes}</p>
                         )}

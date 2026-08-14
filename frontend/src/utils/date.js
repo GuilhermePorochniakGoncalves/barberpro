@@ -46,3 +46,13 @@ export function nomeDiaSemana(dataISO) {
 export function mesAtualISO() {
   return hojeISO().slice(0, 7); // 'YYYY-MM'
 }
+
+// Formata um timestamp ISO8601 (vindo do Postgres, ex.: cancelado_em) como
+// "12/08/2026 14:30" — usado em listas de histórico, não na agenda por dia.
+export function formatarDataHoraExibicao(isoString) {
+  if (!isoString) return "—";
+  return new Date(isoString).toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}

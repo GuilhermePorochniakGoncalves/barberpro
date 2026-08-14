@@ -16,16 +16,24 @@ function formatarReais(valor) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// Arredonda pra 2 casas evitando erro de ponto flutuante tipo 0.1+0.2.
+function arredondar(valor) {
+  return Math.round(valor * 100) / 100;
+}
+
 // Abre a partir do botão "Finalizar atendimento" de um agendamento.
 // Mostra o serviço já agendado (preço do catálogo), permite adicionar itens
-// extra (produtos/serviços consumidos além do corte) e escolher a forma de
-// pagamento antes de confirmar a venda.
+// extra (produtos/serviços consumidos além do corte) e dividir o pagamento
+// entre uma ou mais formas (ex.: metade pix, metade cartão) antes de
+// confirmar a venda.
 function FinalizarAtendimentoModal({ isOpen, onClose, agendamento, catalogo = [], onFinalizado }) {
   const { finalizarAtendimento } = useBarbeiros();
 
   const [itensExtras, setItensExtras] = useState([]);
   const [itemParaAdicionar, setItemParaAdicionar] = useState("");
-  const [formaPagamento, setFormaPagamento] = useState("");
+  // Cada entrada: { formaPagamento, valor }. Uma forma só pode aparecer uma
+  // vez na lista (clicar de novo numa já adicionada não duplica).
+  const [pagamentos, setPagamentos] = useState([]);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
@@ -41,7 +49,9 @@ function FinalizarAtendimentoModal({ isOpen, onClose, agendamento, catalogo = []
     ...itensExtras,
   ];
 
-  const total = itensVenda.reduce((soma, i) => soma + i.preco * i.quantidade, 0);
+  const total = arredondar(itensVenda.reduce((soma, i) => soma + i.preco * i.quantidade, 0));
+  const somaPagamentos = arredondar(pagamentos.reduce((soma, p) => soma + (Number(p.valor) || 0), 0));
+  const restante = arredondar(total - somaPagamentos);
 
   function adicionarItem() {
     if (!itemParaAdicionar) return;
@@ -64,18 +74,46 @@ function FinalizarAtendimentoModal({ isOpen, onClose, agendamento, catalogo = []
     setItensExtras((prev) => prev.filter((i) => i.nome !== nome));
   }
 
+  // Clicar numa forma ainda não usada adiciona ela preenchida com o
+  // restante em aberto (fluxo comum: uma forma só, valor cheio). Pra
+  // dividir, o usuário edita o valor dessa e clica em outra forma — ela
+  // entra com o novo restante.
+  function adicionarFormaPagamento(forma) {
+    setErro("");
+    if (pagamentos.some((p) => p.formaPagamento === forma)) return;
+
+    const valorInicial = restante > 0 ? restante : 0;
+    setPagamentos((prev) => [...prev, { formaPagamento: forma, valor: valorInicial }]);
+  }
+
+  function atualizarValorPagamento(forma, valor) {
+    setPagamentos((prev) => prev.map((p) => (p.formaPagamento === forma ? { ...p, valor } : p)));
+  }
+
+  function removerFormaPagamento(forma) {
+    setPagamentos((prev) => prev.filter((p) => p.formaPagamento !== forma));
+  }
+
   function fecharEResetar() {
     setItensExtras([]);
     setItemParaAdicionar("");
-    setFormaPagamento("");
+    setPagamentos([]);
     setErro("");
     setSalvando(false);
     onClose();
   }
 
   async function confirmar() {
-    if (!formaPagamento) {
-      setErro("Selecione a forma de pagamento.");
+    if (pagamentos.length === 0) {
+      setErro("Selecione ao menos uma forma de pagamento.");
+      return;
+    }
+    if (restante !== 0) {
+      setErro(
+        restante > 0
+          ? `Falta ${formatarReais(restante)} pra completar o total.`
+          : `Os pagamentos somam ${formatarReais(Math.abs(restante))} a mais que o total.`
+      );
       return;
     }
 
@@ -84,7 +122,7 @@ function FinalizarAtendimentoModal({ isOpen, onClose, agendamento, catalogo = []
 
     const resultado = await finalizarAtendimento({
       agendamentoId: agendamento.id,
-      formaPagamento,
+      pagamentos: pagamentos.map((p) => ({ formaPagamento: p.formaPagamento, valor: Number(p.valor) })),
       itens: itensVenda.map((i) => ({ nome: i.nome, quantidade: i.quantidade })),
     });
 
@@ -163,22 +201,67 @@ function FinalizarAtendimentoModal({ isOpen, onClose, agendamento, catalogo = []
             <span className="text-2xl font-bold text-amber-500">{formatarReais(total)}</span>
           </div>
 
-          <p className="font-medium mb-2 text-sm text-zinc-400">Forma de pagamento</p>
-          <div className="grid grid-cols-2 gap-3">
-            {FORMAS_PAGAMENTO.map((f) => (
-              <button
-                key={f.valor}
-                onClick={() => setFormaPagamento(f.valor)}
-                disabled={salvando}
-                className={`border rounded-lg py-3 transition ${
-                  formaPagamento === f.valor
-                    ? "border-amber-600 bg-amber-950/30 text-amber-500 font-semibold"
-                    : "border-zinc-700 text-zinc-300 hover:border-amber-700/50"
-                }`}
-              >
-                {f.rotulo}
-              </button>
-            ))}
+          <p className="font-medium mb-2 text-sm text-zinc-400">
+            Forma de pagamento{" "}
+            <span className="text-zinc-600 font-normal">(clique em mais de uma pra dividir o pagamento)</span>
+          </p>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            {FORMAS_PAGAMENTO.map((f) => {
+              const jaAdicionada = pagamentos.some((p) => p.formaPagamento === f.valor);
+              return (
+                <button
+                  key={f.valor}
+                  onClick={() => adicionarFormaPagamento(f.valor)}
+                  disabled={salvando || jaAdicionada}
+                  className={`border rounded-lg py-3 transition ${
+                    jaAdicionada
+                      ? "border-amber-600 bg-amber-950/30 text-amber-500 font-semibold cursor-default"
+                      : "border-zinc-700 text-zinc-300 hover:border-amber-700/50"
+                  }`}
+                >
+                  {f.rotulo}
+                </button>
+              );
+            })}
+          </div>
+
+          {pagamentos.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {pagamentos.map((p) => {
+                const rotulo = FORMAS_PAGAMENTO.find((f) => f.valor === p.formaPagamento)?.rotulo;
+                return (
+                  <div key={p.formaPagamento} className="flex items-center gap-2">
+                    <span className="w-20 text-sm text-zinc-300">{rotulo}</span>
+                    <span className="text-zinc-500">R$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={p.valor}
+                      onChange={(e) => atualizarValorPagamento(p.formaPagamento, e.target.value)}
+                      className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-zinc-100"
+                      disabled={salvando}
+                    />
+                    <button
+                      onClick={() => removerFormaPagamento(p.formaPagamento)}
+                      className="text-red-400 text-sm hover:text-red-300 px-2"
+                      disabled={salvando}
+                    >
+                      remover
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex justify-between items-center text-sm pt-2 border-t border-zinc-800">
+            <span className="text-zinc-400">
+              {restante === 0 ? "Pagamento completo" : restante > 0 ? "Falta" : "Sobrando"}
+            </span>
+            <span className={restante === 0 ? "text-emerald-500 font-semibold" : "text-amber-500 font-semibold"}>
+              {formatarReais(Math.abs(restante))}
+            </span>
           </div>
         </div>
 
@@ -198,7 +281,7 @@ function FinalizarAtendimentoModal({ isOpen, onClose, agendamento, catalogo = []
           </button>
           <button
             onClick={confirmar}
-            disabled={salvando}
+            disabled={salvando || restante !== 0 || pagamentos.length === 0}
             className="px-6 py-2 bg-amber-600 text-black font-semibold rounded-lg hover:bg-amber-700 disabled:opacity-50"
           >
             {salvando ? "Confirmando..." : "Confirmar pagamento"}

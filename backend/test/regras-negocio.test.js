@@ -69,14 +69,14 @@ test("produto: estoque insuficiente bloqueia a venda; venda ok decrementa o esto
 
   const pedidoDemais = await req("POST", "/vendas", {
     agendamentoId: agendamento.data.id,
-    formaPagamento: "pix",
+    pagamentos: [{ formaPagamento: "pix", valor: 30 + 20 * 3 }],
     itens: [{ nome: "Corte", quantidade: 1 }, { nome: "Cera modeladora", quantidade: 3 }],
   });
   assert.equal(pedidoDemais.status, 409);
 
   const pedidoOk = await req("POST", "/vendas", {
     agendamentoId: agendamento.data.id,
-    formaPagamento: "pix",
+    pagamentos: [{ formaPagamento: "pix", valor: 30 + 20 * 2 }],
     itens: [{ nome: "Corte", quantidade: 1 }, { nome: "Cera modeladora", quantidade: 2 }],
   });
   assert.equal(pedidoOk.status, 201);
@@ -157,7 +157,7 @@ test("fechamento do dia: agrega total por tipo de item e por forma de pagamento"
 
   const venda = await req("POST", "/vendas", {
     agendamentoId: agendamento.data.id,
-    formaPagamento: "pix",
+    pagamentos: [{ formaPagamento: "pix", valor: 50 + 30 * 2 }],
     itens: [{ nome: "Corte", quantidade: 1 }, { nome: "Pomada", quantidade: 2 }],
   });
   assert.equal(venda.status, 201);
@@ -255,4 +255,151 @@ test("lista de espera: cancelar horário sem ninguém esperando notifica zero", 
   const cancelado = await req("DELETE", `/agendamentos/${agendamento.data.id}`);
   assert.equal(cancelado.status, 200);
   assert.equal(cancelado.data.notificadosListaEspera, 0);
+}));
+
+test("duração do serviço: corte+barba de 60min ocupa dois slots de 30min e bloqueia o seguinte", comServidor(async ({ req, criarBarbeiro }) => {
+  const barbeiro = await criarBarbeiro("Zaqueu");
+  const servico = await req("POST", `/barbeiros/${barbeiro.id}/servicos`, {
+    nome: "Corte + Barba",
+    preco: 60,
+    duracaoMinutos: 60,
+  });
+  assert.equal(servico.status, 201);
+  assert.equal(servico.data.duracao_minutos, 60);
+
+  const criado = await req("POST", "/agendamentos", {
+    barbeiroId: barbeiro.id,
+    nome: "Cliente",
+    telefone: "11999998888",
+    servico: "Corte + Barba",
+    data: "2026-08-20",
+    horario: "09:00",
+  });
+  assert.equal(criado.status, 201);
+  assert.equal(criado.data.duracao_minutos, 60);
+
+  // 09:30 está "dentro" do atendimento das 09:00 (que só termina 10:00) —
+  // mesmo sem coincidir o horário exato, precisa recusar por sobreposição.
+  const conflitoMeio = await req("POST", "/agendamentos", {
+    barbeiroId: barbeiro.id,
+    nome: "Outro",
+    telefone: "11988887777",
+    servico: "Corte + Barba",
+    data: "2026-08-20",
+    horario: "09:30",
+  });
+  assert.equal(conflitoMeio.status, 409);
+
+  // 10:00 já é depois do fim (09:00 + 60min) — livre.
+  const livre = await req("POST", "/agendamentos", {
+    barbeiroId: barbeiro.id,
+    nome: "Terceiro",
+    telefone: "11977776666",
+    servico: "Corte + Barba",
+    data: "2026-08-20",
+    horario: "10:00",
+  });
+  assert.equal(livre.status, 201);
+}));
+
+test("pagamento dividido: soma dos pagamentos precisa bater com o total, e cada forma é contabilizada certa no relatório", comServidor(async ({ req, criarBarbeiro }) => {
+  const barbeiro = await criarBarbeiro("Zaqueu");
+  await req("POST", `/barbeiros/${barbeiro.id}/servicos`, { nome: "Corte", preco: 100 });
+
+  const agendamento = await req("POST", "/agendamentos", {
+    barbeiroId: barbeiro.id,
+    nome: "Cliente",
+    telefone: "11999998888",
+    servico: "Corte",
+    data: "2026-08-21",
+    horario: "09:00",
+  });
+
+  const somaErrada = await req("POST", "/vendas", {
+    agendamentoId: agendamento.data.id,
+    pagamentos: [
+      { formaPagamento: "pix", valor: 40 },
+      { formaPagamento: "credito", valor: 40 },
+    ],
+    itens: [{ nome: "Corte", quantidade: 1 }],
+  });
+  assert.equal(somaErrada.status, 400);
+
+  const venda = await req("POST", "/vendas", {
+    agendamentoId: agendamento.data.id,
+    pagamentos: [
+      { formaPagamento: "pix", valor: 40 },
+      { formaPagamento: "credito", valor: 60 },
+    ],
+    itens: [{ nome: "Corte", quantidade: 1 }],
+  });
+  assert.equal(venda.status, 201);
+  assert.equal(venda.data.forma_pagamento, "misto");
+  assert.equal(venda.data.pagamentos.length, 2);
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const relatorio = await req("GET", `/relatorios/diario?data=${hoje}`);
+  const pix = relatorio.data.porFormaPagamento.find((f) => f.formaPagamento === "pix");
+  const credito = relatorio.data.porFormaPagamento.find((f) => f.formaPagamento === "credito");
+  assert.ok(pix.total >= 40);
+  assert.ok(credito.total >= 60);
+}));
+
+test("despesas: cadastra, some do lucro do dia/mês, e dá pra remover", comServidor(async ({ req }) => {
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  const invalida = await req("POST", "/despesas", { descricao: "", valor: -10, data: hoje });
+  assert.equal(invalida.status, 400);
+
+  const despesa = await req("POST", "/despesas", {
+    descricao: "Aluguel do mês",
+    categoria: "aluguel",
+    valor: 500,
+    data: hoje,
+  });
+  assert.equal(despesa.status, 201);
+  assert.equal(despesa.data.categoria, "aluguel");
+
+  const lista = await req("GET", `/despesas?de=${hoje}&ate=${hoje}`);
+  assert.ok(lista.data.some((d) => d.id === despesa.data.id));
+
+  const relatorioDia = await req("GET", `/relatorios/diario?data=${hoje}`);
+  assert.ok(relatorioDia.data.totalDespesas >= 500);
+
+  const mesAtual = hoje.slice(0, 7);
+  const relatorioMes = await req("GET", `/relatorios/mensal?mes=${mesAtual}`);
+  assert.ok(relatorioMes.data.totalDespesas >= 500);
+
+  const removida = await req("DELETE", `/despesas/${despesa.data.id}`);
+  assert.equal(removida.status, 204);
+}));
+
+test("histórico de cancelamento: agendamento cancelado aparece no relatório de cancelamentos com timestamp", comServidor(async ({ req, criarBarbeiro }) => {
+  const barbeiro = await criarBarbeiro("Zaqueu");
+  await req("POST", `/barbeiros/${barbeiro.id}/servicos`, { nome: "Corte", preco: 30 });
+
+  const agendamento = await req("POST", "/agendamentos", {
+    barbeiroId: barbeiro.id,
+    nome: "Cliente Faltante",
+    telefone: "11999997777",
+    servico: "Corte",
+    data: "2026-08-22",
+    horario: "09:00",
+  });
+  assert.equal(agendamento.status, 201);
+
+  await req("DELETE", `/agendamentos/${agendamento.data.id}`);
+
+  // Cancelar de novo (já cancelado) é rejeitado, não notifica de novo.
+  const duploCancelamento = await req("DELETE", `/agendamentos/${agendamento.data.id}`);
+  assert.equal(duploCancelamento.status, 409);
+
+  const relatorio = await req(
+    "GET",
+    `/relatorios/cancelamentos?de=2026-08-22&ate=2026-08-22&barbeiroId=${barbeiro.id}`
+  );
+  assert.equal(relatorio.status, 200);
+  assert.equal(relatorio.data.total, 1);
+  assert.equal(relatorio.data.cancelamentos[0].nome, "Cliente Faltante");
+  assert.ok(relatorio.data.cancelamentos[0].cancelado_em);
 }));

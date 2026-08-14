@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import Layout from "../components/Layout";
 import { Skeleton, SkeletonStatCards, SkeletonTableRows } from "../components/Skeleton";
 import api from "../services/api";
-import { adicionarDias, ehHoje, formatarDataExibicao, hojeISO, mesAtualISO } from "../utils/date";
+import { adicionarDias, ehHoje, formatarDataExibicao, formatarDataHoraExibicao, hojeISO, mesAtualISO } from "../utils/date";
 import { extrairMensagemErro } from "../utils/erro";
 
 const ROTULOS_PAGAMENTO = {
@@ -10,6 +10,7 @@ const ROTULOS_PAGAMENTO = {
   credito: "Crédito",
   dinheiro: "Dinheiro",
   pix: "Pix",
+  misto: "Misto",
 };
 
 function formatarReais(valor) {
@@ -25,14 +26,14 @@ function formatarMes(mesISO) {
 }
 
 function Relatorios() {
-  const [aba, setAba] = useState("dia"); // "dia" | "mes"
+  const [aba, setAba] = useState("dia"); // "dia" | "mes" | "cancelamentos"
 
   return (
     <Layout>
       <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
         <h1 className="text-3xl font-bold text-white">Relatórios</h1>
 
-        <div className="flex bg-zinc-900 border border-zinc-800 rounded-lg p-1">
+        <div className="flex bg-zinc-900 border border-zinc-800 rounded-lg p-1 flex-wrap">
           <button
             onClick={() => setAba("dia")}
             className={`px-4 py-2 rounded-md text-sm font-semibold transition ${
@@ -49,10 +50,18 @@ function Relatorios() {
           >
             Relatório mensal
           </button>
+          <button
+            onClick={() => setAba("cancelamentos")}
+            className={`px-4 py-2 rounded-md text-sm font-semibold transition ${
+              aba === "cancelamentos" ? "bg-amber-600 text-black" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            Cancelamentos
+          </button>
         </div>
       </div>
 
-      {aba === "dia" ? <FechamentoDiario /> : <RelatorioMensal />}
+      {aba === "dia" ? <FechamentoDiario /> : aba === "mes" ? <RelatorioMensal /> : <Cancelamentos />}
     </Layout>
   );
 }
@@ -132,7 +141,7 @@ function FechamentoDiario() {
         </>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
               <p className="text-zinc-400">Total arrecadado</p>
               <h2 className="text-3xl font-bold text-amber-500 mt-2">
@@ -152,6 +161,25 @@ function FechamentoDiario() {
               <h2 className="text-3xl font-bold text-white mt-2">
                 {formatarReais(relatorio.porTipo.produto)}
               </h2>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+              <p className="text-zinc-400">Despesas do dia</p>
+              <h2 className="text-3xl font-bold text-red-400 mt-2">{formatarReais(relatorio.totalDespesas)}</h2>
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+              <p className="text-zinc-400">Lucro do dia</p>
+              <h2 className={`text-3xl font-bold mt-2 ${relatorio.lucro >= 0 ? "text-emerald-500" : "text-red-400"}`}>
+                {formatarReais(relatorio.lucro)}
+              </h2>
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+              <p className="text-zinc-400">Cancelamentos</p>
+              <h2 className="text-3xl font-bold text-white mt-2">{relatorio.cancelamentos}</h2>
             </div>
           </div>
 
@@ -253,7 +281,7 @@ function RelatorioMensal() {
         </>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
               <p className="text-zinc-400">Total de atendimentos</p>
               <h2 className="text-3xl font-bold text-amber-500 mt-2">
@@ -266,6 +294,25 @@ function RelatorioMensal() {
               <h2 className="text-3xl font-bold text-amber-500 mt-2">
                 {formatarReais(relatorio.faturamentoTotal)}
               </h2>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+              <p className="text-zinc-400">Despesas do mês</p>
+              <h2 className="text-3xl font-bold text-red-400 mt-2">{formatarReais(relatorio.totalDespesas)}</h2>
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+              <p className="text-zinc-400">Lucro do mês</p>
+              <h2 className={`text-3xl font-bold mt-2 ${relatorio.lucro >= 0 ? "text-emerald-500" : "text-red-400"}`}>
+                {formatarReais(relatorio.lucro)}
+              </h2>
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl">
+              <p className="text-zinc-400">Cancelamentos</p>
+              <h2 className="text-3xl font-bold text-white mt-2">{relatorio.cancelamentos}</h2>
             </div>
           </div>
 
@@ -334,6 +381,122 @@ function RelatorioMensal() {
                 </tbody>
               </table>
               </div>
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+// Histórico de cancelamentos — quem marcou e cancelou, sem sumir do banco
+// (ver DELETE /agendamentos/:id no backend). Útil pra ter uma noção de
+// no-show/cancelamento, não só o que foi de fato atendido.
+function Cancelamentos() {
+  const [de, setDe] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [ate, setAte] = useState(hojeISO());
+  const [relatorio, setRelatorio] = useState(null);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState(null);
+
+  async function carregarRelatorio() {
+    setCarregando(true);
+    setErro(null);
+    try {
+      const response = await api.get("/relatorios/cancelamentos", { params: { de, ate } });
+      setRelatorio(response.data);
+    } catch (error) {
+      setErro(extrairMensagemErro(error, "Não foi possível carregar os cancelamentos."));
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carrega dados externos ao trocar o período, não deriva estado local
+    carregarRelatorio();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [de, ate]);
+
+  return (
+    <>
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <label className="text-sm text-zinc-400">
+          De{" "}
+          <input
+            type="date"
+            value={de}
+            onChange={(e) => setDe(e.target.value)}
+            className="bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-sm text-zinc-100 ml-1"
+          />
+        </label>
+        <label className="text-sm text-zinc-400">
+          Até{" "}
+          <input
+            type="date"
+            value={ate}
+            onChange={(e) => setAte(e.target.value)}
+            className="bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-sm text-zinc-100 ml-1"
+          />
+        </label>
+      </div>
+
+      {erro && <p className="text-red-400 mb-4">{erro}</p>}
+
+      {carregando ? (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+          <div className="p-6 pb-4">
+            <Skeleton className="h-5 w-48" />
+          </div>
+          <table className="w-full">
+            <tbody>
+              <SkeletonTableRows colunas={4} linhas={4} />
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <>
+          <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl mb-6 max-w-xs">
+            <p className="text-zinc-400">Total no período</p>
+            <h2 className="text-3xl font-bold text-red-400 mt-2">{relatorio.total}</h2>
+          </div>
+
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px]">
+                <thead className="bg-zinc-950">
+                  <tr>
+                    <th className="text-left p-4 text-zinc-400 font-medium">Cliente</th>
+                    <th className="text-left p-4 text-zinc-400 font-medium">Barbeiro</th>
+                    <th className="text-left p-4 text-zinc-400 font-medium">Era em</th>
+                    <th className="text-left p-4 text-zinc-400 font-medium">Cancelado em</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {relatorio.cancelamentos.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" className="p-6 text-center text-zinc-500">
+                        Nenhum cancelamento nesse período.
+                      </td>
+                    </tr>
+                  ) : (
+                    relatorio.cancelamentos.map((c) => (
+                      <tr key={c.id} className="border-t border-zinc-800">
+                        <td className="p-4 font-medium text-zinc-100">{c.nome}</td>
+                        <td className="p-4 text-zinc-300">{c.barbeiro_nome}</td>
+                        <td className="p-4 text-zinc-300">
+                          {formatarDataExibicao(c.data)} às {c.horario}
+                        </td>
+                        <td className="p-4 text-zinc-500">{formatarDataHoraExibicao(c.cancelado_em)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </>

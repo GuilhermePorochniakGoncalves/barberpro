@@ -18,6 +18,7 @@ const {
   validarProduto,
   validarBloqueio,
   validarListaEspera,
+  validarDespesa,
 } = require("./validation");
 
 const app = express();
@@ -32,12 +33,15 @@ app.use(express.json());
 
 // ---------- Helpers ----------
 
+// Map<nomeDoServico, duracaoMinutos> — serve tanto pra validar o nome do
+// serviço escolhido (validarAgendamento espera um array; usamos as chaves)
+// quanto pra saber quanto tempo o agendamento vai ocupar na agenda.
 async function servicosAtivosDoBarbeiro(barbeiroId) {
   const rows = await db.many(
-    "SELECT nome FROM catalogo_itens WHERE tipo = 'servico' AND ativo = TRUE AND barbeiro_id = $1",
+    "SELECT nome, duracao_minutos FROM catalogo_itens WHERE tipo = 'servico' AND ativo = TRUE AND barbeiro_id = $1",
     [barbeiroId]
   );
-  return rows.map((r) => r.nome);
+  return new Map(rows.map((r) => [r.nome, r.duracao_minutos]));
 }
 
 // Catálogo disponível pra um barbeiro finalizar um atendimento: os próprios
@@ -61,24 +65,57 @@ async function upsertCliente({ nome, telefone }) {
   }
 }
 
-async function buscarConflitoAgendamento({ barbeiroId, data, horario }, ignorarId = null) {
-  if (ignorarId) {
-    return db.one(
-      "SELECT * FROM agendamentos WHERE barbeiro_id = $1 AND data = $2 AND horario = $3 AND id != $4",
-      [barbeiroId, data, horario, ignorarId]
-    );
-  }
-  return db.one(
-    "SELECT * FROM agendamentos WHERE barbeiro_id = $1 AND data = $2 AND horario = $3",
-    [barbeiroId, data, horario]
+function horarioParaMinutos(horario) {
+  const [h, m] = horario.split(":").map(Number);
+  return h * 60 + m;
+}
+
+// Serviços têm duração variável agora (ex.: corte 30min, corte+barba
+// 60min) — conflito de horário não é mais "mesmo slot exato", é
+// sobreposição de intervalo: [horario, horario+duração). Cancelados não
+// contam (o registro fica no banco pro histórico, mas não ocupa a agenda).
+function encontrarConflito(agendamentosDoDia, horario, duracaoMinutos, ignorarId = null) {
+  const inicio = horarioParaMinutos(horario);
+  const fim = inicio + duracaoMinutos;
+
+  return (
+    agendamentosDoDia.find((a) => {
+      if (ignorarId && a.id === ignorarId) return false;
+      if (a.status === "cancelado") return false;
+      const aInicio = horarioParaMinutos(a.horario);
+      const aFim = aInicio + (a.duracao_minutos ?? 30);
+      return inicio < aFim && aInicio < fim;
+    }) ?? null
   );
 }
 
-// Dia inteiro (horario NULL) ou o horário específico bloqueado pelo barbeiro.
-async function slotBloqueado(barbeiroId, data, horario) {
-  return db.one(
-    "SELECT * FROM barbeiro_bloqueios WHERE barbeiro_id = $1 AND data = $2 AND (horario IS NULL OR horario = $3)",
-    [barbeiroId, data, horario]
+async function buscarConflitoAgendamento({ barbeiroId, data, horario, duracaoMinutos }, ignorarId = null) {
+  const doDia = await db.many("SELECT * FROM agendamentos WHERE barbeiro_id = $1 AND data = $2", [
+    barbeiroId,
+    data,
+  ]);
+  return encontrarConflito(doDia, horario, duracaoMinutos, ignorarId);
+}
+
+// Dia inteiro (horario NULL) ou qualquer horário específico bloqueado pelo
+// barbeiro que caia dentro do intervalo [horario, horario+duração) pedido.
+async function slotBloqueado(barbeiroId, data, horario, duracaoMinutos = 30) {
+  const bloqueios = await db.many("SELECT * FROM barbeiro_bloqueios WHERE barbeiro_id = $1 AND data = $2", [
+    barbeiroId,
+    data,
+  ]);
+
+  const diaInteiro = bloqueios.find((b) => b.horario === null);
+  if (diaInteiro) return diaInteiro;
+
+  const inicio = horarioParaMinutos(horario);
+  const fim = inicio + duracaoMinutos;
+  return (
+    bloqueios.find((b) => {
+      if (b.horario === null) return false;
+      const m = horarioParaMinutos(b.horario);
+      return m >= inicio && m < fim;
+    }) ?? null
   );
 }
 
@@ -171,8 +208,9 @@ app.post("/barbeiros/:id/servicos", async (req, res) => {
   if (duplicado) return res.status(409).json({ erro: "Esse barbeiro já tem um serviço com esse nome." });
 
   const item = await db.one(
-    "INSERT INTO catalogo_itens (nome, tipo, preco, barbeiro_id) VALUES ($1, 'servico', $2, $3) RETURNING *",
-    [data.nome, data.preco, barbeiroId]
+    `INSERT INTO catalogo_itens (nome, tipo, preco, barbeiro_id, duracao_minutos)
+     VALUES ($1, 'servico', $2, $3, $4) RETURNING *`,
+    [data.nome, data.preco, barbeiroId, data.duracaoMinutos]
   );
 
   res.status(201).json(item);
@@ -191,10 +229,14 @@ app.put("/barbeiros/:id/servicos/:itemId", async (req, res) => {
   if (!valido) return res.status(400).json({ erros: errors });
 
   const ativo = req.body.ativo !== undefined ? Boolean(req.body.ativo) : item.ativo;
+  // Preserva a duração atual se não veio no corpo (mesmo padrão do `ativo`
+  // acima) — sem isso, um PUT que só muda o preço resetaria a duração pro
+  // default de 30min de validarServico.
+  const duracaoMinutos = req.body.duracaoMinutos !== undefined ? data.duracaoMinutos : item.duracao_minutos;
 
   const atualizado = await db.one(
-    "UPDATE catalogo_itens SET nome = $1, preco = $2, ativo = $3 WHERE id = $4 RETURNING *",
-    [data.nome, data.preco, ativo, item.id]
+    "UPDATE catalogo_itens SET nome = $1, preco = $2, ativo = $3, duracao_minutos = $4 WHERE id = $5 RETURNING *",
+    [data.nome, data.preco, ativo, duracaoMinutos, item.id]
   );
 
   res.json(atualizado);
@@ -280,7 +322,7 @@ app.post("/barbeiros/:id/bloqueios", async (req, res) => {
   const { errors, valido, data } = validarBloqueio(req.body);
   if (!valido) return res.status(400).json({ erros: errors });
 
-  const jaBloqueado = await slotBloqueado(barbeiroId, data.data, data.horario);
+  const jaBloqueado = await slotBloqueado(barbeiroId, data.data, data.horario ?? "00:00", 1);
   if (jaBloqueado) {
     return res.status(409).json({ erro: "Esse dia/horário já está bloqueado." });
   }
@@ -453,7 +495,7 @@ app.delete("/clientes/:id", async (req, res) => {
 // ---------- Agendamentos ----------
 
 app.get("/agendamentos", async (req, res) => {
-  const { barbeiroId, data } = req.query;
+  const { barbeiroId, data, incluirCancelados } = req.query;
 
   const condicoes = [];
   const params = [];
@@ -465,6 +507,12 @@ app.get("/agendamentos", async (req, res) => {
   if (data) {
     params.push(data);
     condicoes.push(`a.data = $${params.length}`);
+  }
+  // Por padrão a agenda não mostra cancelados (o horário fica livre pra
+  // reagendar) — quem quer o histórico completo (relatório de
+  // cancelamentos) pede explicitamente com ?incluirCancelados=true.
+  if (incluirCancelados !== "true") {
+    condicoes.push(`a.status != 'cancelado'`);
   }
 
   const where = condicoes.length ? `WHERE ${condicoes.join(" AND ")}` : "";
@@ -486,17 +534,20 @@ app.get("/agendamentos", async (req, res) => {
 
 app.post("/agendamentos", async (req, res) => {
   const barbeiroIdBruto = Number(req.body?.barbeiroId);
-  const { errors, valido, data } = validarAgendamento(req.body, await servicosAtivosDoBarbeiro(barbeiroIdBruto));
+  const servicosMap = await servicosAtivosDoBarbeiro(barbeiroIdBruto);
+  const { errors, valido, data } = validarAgendamento(req.body, [...servicosMap.keys()]);
   if (!valido) return res.status(400).json({ erros: errors });
 
   const barbeiro = await db.one("SELECT * FROM barbeiros WHERE id = $1", [data.barbeiroId]);
   if (!barbeiro) return res.status(400).json({ erros: ["Barbeiro não encontrado."] });
 
-  if (await slotBloqueado(data.barbeiroId, data.data, data.horario)) {
+  const duracaoMinutos = servicosMap.get(data.servico) ?? 30;
+
+  if (await slotBloqueado(data.barbeiroId, data.data, data.horario, duracaoMinutos)) {
     return res.status(409).json({ erro: `${barbeiro.nome} não atende nesse dia/horário.` });
   }
 
-  const conflito = await buscarConflitoAgendamento(data);
+  const conflito = await buscarConflitoAgendamento({ ...data, duracaoMinutos });
   if (conflito) {
     return res.status(409).json({
       erro: `${barbeiro.nome} já tem um agendamento em ${data.data} às ${data.horario} (${conflito.nome}).`,
@@ -504,9 +555,9 @@ app.post("/agendamentos", async (req, res) => {
   }
 
   const agendamento = await db.one(
-    `INSERT INTO agendamentos (barbeiro_id, nome, telefone, servico, data, horario)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [data.barbeiroId, data.nome, data.telefone, data.servico, data.data, data.horario]
+    `INSERT INTO agendamentos (barbeiro_id, nome, telefone, servico, data, horario, duracao_minutos)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [data.barbeiroId, data.nome, data.telefone, data.servico, data.data, data.horario, duracaoMinutos]
   );
 
   await upsertCliente(data);
@@ -521,19 +572,25 @@ app.put("/agendamentos/:id", async (req, res) => {
   if (existente.status === "concluido") {
     return res.status(409).json({ erro: "Atendimento já concluído não pode ser alterado." });
   }
+  if (existente.status === "cancelado") {
+    return res.status(409).json({ erro: "Agendamento cancelado não pode ser alterado." });
+  }
 
   const barbeiroIdBruto = Number(req.body?.barbeiroId);
-  const { errors, valido, data } = validarAgendamento(req.body, await servicosAtivosDoBarbeiro(barbeiroIdBruto));
+  const servicosMap = await servicosAtivosDoBarbeiro(barbeiroIdBruto);
+  const { errors, valido, data } = validarAgendamento(req.body, [...servicosMap.keys()]);
   if (!valido) return res.status(400).json({ erros: errors });
 
   const barbeiro = await db.one("SELECT * FROM barbeiros WHERE id = $1", [data.barbeiroId]);
   if (!barbeiro) return res.status(400).json({ erros: ["Barbeiro não encontrado."] });
 
-  if (await slotBloqueado(data.barbeiroId, data.data, data.horario)) {
+  const duracaoMinutos = servicosMap.get(data.servico) ?? 30;
+
+  if (await slotBloqueado(data.barbeiroId, data.data, data.horario, duracaoMinutos)) {
     return res.status(409).json({ erro: `${barbeiro.nome} não atende nesse dia/horário.` });
   }
 
-  const conflito = await buscarConflitoAgendamento(data, id);
+  const conflito = await buscarConflitoAgendamento({ ...data, duracaoMinutos }, id);
   if (conflito) {
     return res.status(409).json({
       erro: `${barbeiro.nome} já tem um agendamento em ${data.data} às ${data.horario} (${conflito.nome}).`,
@@ -543,10 +600,10 @@ app.put("/agendamentos/:id", async (req, res) => {
   const atualizado = await db.one(
     `UPDATE agendamentos
      SET barbeiro_id = $1, nome = $2, telefone = $3, servico = $4, data = $5, horario = $6,
-         atualizado_em = NOW()
-     WHERE id = $7
+         duracao_minutos = $7, atualizado_em = NOW()
+     WHERE id = $8
      RETURNING *`,
-    [data.barbeiroId, data.nome, data.telefone, data.servico, data.data, data.horario, id]
+    [data.barbeiroId, data.nome, data.telefone, data.servico, data.data, data.horario, duracaoMinutos, id]
   );
 
   await upsertCliente(data);
@@ -561,8 +618,18 @@ app.delete("/agendamentos/:id", async (req, res) => {
   if (existente.status === "concluido") {
     return res.status(409).json({ erro: "Atendimento já concluído não pode ser cancelado." });
   }
+  if (existente.status === "cancelado") {
+    return res.status(409).json({ erro: "Esse agendamento já está cancelado." });
+  }
 
-  await db.query("DELETE FROM agendamentos WHERE id = $1", [id]);
+  // Cancelar vira um status (com timestamp), não um DELETE — mantém
+  // histórico pra número de cancelamentos/no-show (ver GET
+  // /relatorios/cancelamentos). O horário libera na agenda mesmo assim:
+  // GET /agendamentos já filtra status='cancelado' fora por padrão.
+  await db.query(
+    "UPDATE agendamentos SET status = 'cancelado', cancelado_em = NOW(), atualizado_em = NOW() WHERE id = $1",
+    [id]
+  );
 
   // Libera o slot — se alguém estava na lista de espera desse
   // barbeiro/dia/horário, marca como notificado. O envio de verdade
@@ -618,6 +685,7 @@ app.get("/vendas", async (req, res) => {
     vendas.map(async (v) => ({
       ...v,
       itens: await db.many("SELECT * FROM venda_itens WHERE venda_id = $1", [v.id]),
+      pagamentos: await db.many("SELECT * FROM venda_pagamentos WHERE venda_id = $1", [v.id]),
     }))
   );
 
@@ -634,6 +702,9 @@ app.post("/vendas", async (req, res) => {
   }
   if (agendamento.status === "concluido") {
     return res.status(409).json({ erro: "Este atendimento já foi finalizado." });
+  }
+  if (agendamento.status === "cancelado") {
+    return res.status(409).json({ erro: "Este agendamento foi cancelado." });
   }
 
   const catalogoMap = await catalogoAtivoMap(agendamento.barbeiro_id);
@@ -666,7 +737,7 @@ app.post("/vendas", async (req, res) => {
         agendamento.barbeiro_id,
         agendamento.nome,
         agendamento.telefone,
-        data.formaPagamento,
+        data.formaPagamentoResumo,
         data.valorTotal,
       ]
     );
@@ -688,6 +759,14 @@ app.post("/vendas", async (req, res) => {
       }
     }
 
+    for (const pagamento of data.pagamentos) {
+      await client.query("INSERT INTO venda_pagamentos (venda_id, forma_pagamento, valor) VALUES ($1, $2, $3)", [
+        venda.id,
+        pagamento.formaPagamento,
+        pagamento.valor,
+      ]);
+    }
+
     await client.query("UPDATE agendamentos SET status = 'concluido', atualizado_em = NOW() WHERE id = $1", [
       agendamento.id,
     ]);
@@ -695,7 +774,10 @@ app.post("/vendas", async (req, res) => {
     await client.query("COMMIT");
 
     const { rows: itens } = await client.query("SELECT * FROM venda_itens WHERE venda_id = $1", [venda.id]);
-    res.status(201).json({ ...venda, itens });
+    const { rows: pagamentos } = await client.query("SELECT * FROM venda_pagamentos WHERE venda_id = $1", [
+      venda.id,
+    ]);
+    res.status(201).json({ ...venda, itens, pagamentos });
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -704,60 +786,52 @@ app.post("/vendas", async (req, res) => {
   }
 });
 
-// ---------- Relatórios ----------
+// ---------- Despesas (saídas de caixa) ----------
 
-app.get("/relatorios/mensal", async (req, res) => {
-  const mes = req.query.mes || new Date().toISOString().slice(0, 7); // 'YYYY-MM'
+app.get("/despesas", async (req, res) => {
+  const { de, ate } = req.query;
 
-  const totais = await db.one(
-    `SELECT COUNT(*) AS "totalAtendimentos", COALESCE(SUM(valor_total), 0) AS "faturamentoTotal"
-     FROM vendas WHERE to_char(criado_em, 'YYYY-MM') = $1`,
-    [mes]
-  );
+  const condicoes = [];
+  const params = [];
 
-  const porBarbeiro = await db.many(
-    `SELECT b.id AS "barbeiroId", b.nome AS barbeiro,
-            COUNT(*) AS atendimentos, COALESCE(SUM(v.valor_total), 0) AS faturamento
-     FROM vendas v
-     JOIN barbeiros b ON b.id = v.barbeiro_id
-     WHERE to_char(v.criado_em, 'YYYY-MM') = $1
-     GROUP BY b.id
-     ORDER BY faturamento DESC`,
-    [mes]
-  );
+  if (de) {
+    params.push(de);
+    condicoes.push(`data >= $${params.length}`);
+  }
+  if (ate) {
+    params.push(ate);
+    condicoes.push(`data <= $${params.length}`);
+  }
 
-  const porFormaPagamento = await db.many(
-    `SELECT forma_pagamento AS "formaPagamento", COUNT(*) AS quantidade,
-            COALESCE(SUM(valor_total), 0) AS faturamento
-     FROM vendas
-     WHERE to_char(criado_em, 'YYYY-MM') = $1
-     GROUP BY forma_pagamento
-     ORDER BY quantidade DESC`,
-    [mes]
-  );
+  const where = condicoes.length ? `WHERE ${condicoes.join(" AND ")}` : "";
+  const despesas = await db.many(`SELECT * FROM despesas ${where} ORDER BY data DESC, criado_em DESC`, params);
 
-  res.json({
-    mes,
-    totalAtendimentos: Number(totais.totalAtendimentos),
-    faturamentoTotal: Number(totais.faturamentoTotal),
-    porBarbeiro: porBarbeiro.map((b) => ({
-      ...b,
-      atendimentos: Number(b.atendimentos),
-      faturamento: Number(b.faturamento),
-    })),
-    porFormaPagamento: porFormaPagamento.map((f) => ({
-      ...f,
-      quantidade: Number(f.quantidade),
-      faturamento: Number(f.faturamento),
-    })),
-  });
+  res.json(despesas);
 });
 
-// Fechamento de caixa de um dia: total arrecadado, separado por produto vs
-// serviço (soma dos itens de venda, não do valor_total da venda inteira —
-// uma venda pode misturar os dois), e por forma de pagamento. Reaproveita a
-// mesma tabela `vendas`/`venda_itens` do relatório mensal, só filtrando por
-// um dia em vez do mês inteiro.
+app.post("/despesas", async (req, res) => {
+  const { errors, valido, data } = validarDespesa(req.body);
+  if (!valido) return res.status(400).json({ erros: errors });
+
+  const despesa = await db.one(
+    "INSERT INTO despesas (descricao, categoria, valor, data) VALUES ($1, $2, $3, $4) RETURNING *",
+    [data.descricao, data.categoria, data.valor, data.data]
+  );
+
+  res.status(201).json(despesa);
+});
+
+app.delete("/despesas/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  const existente = await db.one("SELECT * FROM despesas WHERE id = $1", [id]);
+  if (!existente) return res.status(404).json({ erro: "Despesa não encontrada." });
+
+  await db.query("DELETE FROM despesas WHERE id = $1", [id]);
+  res.status(204).send();
+});
+
+// ---------- Relatórios ----------
+
 app.get("/relatorios/diario", async (req, res) => {
   const data = req.query.data || new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
 
@@ -780,12 +854,27 @@ app.get("/relatorios/diario", async (req, res) => {
     porTipo[row.tipo] = Number(row.total);
   }
 
+  // Agrega por venda_pagamentos (não por vendas.forma_pagamento): uma
+  // venda "misto" (parte pix, parte cartão) precisa contar o valor de
+  // cada parte na forma certa, não tudo numa linha "misto".
   const porFormaPagamento = await db.many(
-    `SELECT forma_pagamento AS "formaPagamento", COUNT(*) AS quantidade, COALESCE(SUM(valor_total), 0) AS total
-     FROM vendas
-     WHERE criado_em::date = $1::date
-     GROUP BY forma_pagamento
+    `SELECT vp.forma_pagamento AS "formaPagamento", COUNT(*) AS quantidade, COALESCE(SUM(vp.valor), 0) AS total
+     FROM venda_pagamentos vp
+     JOIN vendas v ON v.id = vp.venda_id
+     WHERE v.criado_em::date = $1::date
+     GROUP BY vp.forma_pagamento
      ORDER BY quantidade DESC`,
+    [data]
+  );
+
+  const { total: totalDespesasBruto } = await db.one(
+    "SELECT COALESCE(SUM(valor), 0) AS total FROM despesas WHERE data = $1",
+    [data]
+  );
+  const totalDespesas = Number(totalDespesasBruto);
+
+  const { total: cancelamentosBruto } = await db.one(
+    "SELECT COUNT(*) AS total FROM agendamentos WHERE data = $1 AND status = 'cancelado'",
     [data]
   );
 
@@ -799,7 +888,105 @@ app.get("/relatorios/diario", async (req, res) => {
       quantidade: Number(f.quantidade),
       total: Number(f.total),
     })),
+    totalDespesas,
+    lucro: Number(totais.totalArrecadado) - totalDespesas,
+    cancelamentos: Number(cancelamentosBruto),
   });
+});
+
+app.get("/relatorios/mensal", async (req, res) => {
+  const mes = req.query.mes || new Date().toISOString().slice(0, 7); // 'YYYY-MM'
+
+  const totais = await db.one(
+    `SELECT COUNT(*) AS "totalAtendimentos", COALESCE(SUM(valor_total), 0) AS "faturamentoTotal"
+     FROM vendas WHERE to_char(criado_em, 'YYYY-MM') = $1`,
+    [mes]
+  );
+
+  const porBarbeiro = await db.many(
+    `SELECT b.id AS "barbeiroId", b.nome AS barbeiro,
+            COUNT(*) AS atendimentos, COALESCE(SUM(v.valor_total), 0) AS faturamento
+     FROM vendas v
+     JOIN barbeiros b ON b.id = v.barbeiro_id
+     WHERE to_char(v.criado_em, 'YYYY-MM') = $1
+     GROUP BY b.id
+     ORDER BY faturamento DESC`,
+    [mes]
+  );
+
+  const porFormaPagamento = await db.many(
+    `SELECT vp.forma_pagamento AS "formaPagamento", COUNT(*) AS quantidade, COALESCE(SUM(vp.valor), 0) AS faturamento
+     FROM venda_pagamentos vp
+     JOIN vendas v ON v.id = vp.venda_id
+     WHERE to_char(v.criado_em, 'YYYY-MM') = $1
+     GROUP BY vp.forma_pagamento
+     ORDER BY quantidade DESC`,
+    [mes]
+  );
+
+  // `despesas.data` é texto 'YYYY-MM-DD' — LIKE 'YYYY-MM%' em vez de
+  // to_char evita depender da função customizada registrada só pro pg-mem
+  // de teste, e funciona igual nos dois motores.
+  const { total: despesasBruto } = await db.one(
+    "SELECT COALESCE(SUM(valor), 0) AS total FROM despesas WHERE data LIKE $1",
+    [`${mes}%`]
+  );
+  const totalDespesas = Number(despesasBruto);
+
+  const { total: cancelamentosBruto } = await db.one(
+    "SELECT COUNT(*) AS total FROM agendamentos WHERE data LIKE $1 AND status = 'cancelado'",
+    [`${mes}%`]
+  );
+
+  res.json({
+    mes,
+    totalAtendimentos: Number(totais.totalAtendimentos),
+    faturamentoTotal: Number(totais.faturamentoTotal),
+    porBarbeiro: porBarbeiro.map((b) => ({
+      ...b,
+      atendimentos: Number(b.atendimentos),
+      faturamento: Number(b.faturamento),
+    })),
+    porFormaPagamento: porFormaPagamento.map((f) => ({
+      ...f,
+      quantidade: Number(f.quantidade),
+      faturamento: Number(f.faturamento),
+    })),
+    totalDespesas,
+    lucro: Number(totais.faturamentoTotal) - totalDespesas,
+    cancelamentos: Number(cancelamentosBruto),
+  });
+});
+
+app.get("/relatorios/cancelamentos", async (req, res) => {
+  const { de, ate, barbeiroId } = req.query;
+
+  const condicoes = ["a.status = 'cancelado'"];
+  const params = [];
+
+  if (de) {
+    params.push(de);
+    condicoes.push(`a.data >= $${params.length}`);
+  }
+  if (ate) {
+    params.push(ate);
+    condicoes.push(`a.data <= $${params.length}`);
+  }
+  if (barbeiroId) {
+    params.push(Number(barbeiroId));
+    condicoes.push(`a.barbeiro_id = $${params.length}`);
+  }
+
+  const cancelamentos = await db.many(
+    `SELECT a.*, b.nome AS barbeiro_nome
+     FROM agendamentos a
+     JOIN barbeiros b ON b.id = a.barbeiro_id
+     WHERE ${condicoes.join(" AND ")}
+     ORDER BY a.cancelado_em DESC`,
+    params
+  );
+
+  res.json({ total: cancelamentos.length, cancelamentos });
 });
 
 // ---------- Utilidades ----------

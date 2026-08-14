@@ -123,17 +123,11 @@ async function initSchema() {
       servico TEXT NOT NULL,
       data TEXT NOT NULL,
       horario TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'agendado' CHECK (status IN ('agendado', 'concluido')),
+      status TEXT NOT NULL DEFAULT 'agendado'
+        CONSTRAINT agendamentos_status_check CHECK (status IN ('agendado', 'concluido', 'cancelado')),
       criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-  `);
-
-  // Conflito de horário agora é por barbeiro — dois barbeiros podem atender
-  // clientes diferentes no mesmo dia/horário.
-  await query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_agendamentos_barbeiro_data_horario
-    ON agendamentos (barbeiro_id, data, horario);
   `);
 
   // Folga (dia inteiro, horario NULL) ou horário específico bloqueado pelo
@@ -155,7 +149,8 @@ async function initSchema() {
       barbeiro_id INTEGER NOT NULL REFERENCES barbeiros(id),
       cliente_nome TEXT NOT NULL,
       cliente_telefone TEXT NOT NULL,
-      forma_pagamento TEXT NOT NULL CHECK (forma_pagamento IN ('debito', 'credito', 'dinheiro', 'pix')),
+      forma_pagamento TEXT NOT NULL
+        CONSTRAINT vendas_forma_pagamento_check CHECK (forma_pagamento IN ('debito', 'credito', 'dinheiro', 'pix', 'misto')),
       valor_total REAL NOT NULL,
       criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -188,6 +183,54 @@ async function initSchema() {
       status TEXT NOT NULL DEFAULT 'aguardando' CHECK (status IN ('aguardando', 'notificado', 'cancelado')),
       criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       notificado_em TIMESTAMPTZ
+    );
+  `);
+
+  // Duração de cada serviço (minutos) — usada pra calcular quanto tempo o
+  // agendamento ocupa na agenda (ver server.js: conflito de horário passou
+  // a ser por sobreposição de intervalo, não mais slot exato).
+  await query(`ALTER TABLE catalogo_itens ADD COLUMN IF NOT EXISTS duracao_minutos INTEGER NOT NULL DEFAULT 30;`);
+  await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS duracao_minutos INTEGER NOT NULL DEFAULT 30;`);
+
+  // Cancelamento agora é um status (com timestamp), não mais um DELETE —
+  // preserva histórico pra números de cancelamento/no-show. Como o registro
+  // cancelado continua na tabela, o UNIQUE antigo de slot exato deixa de
+  // fazer sentido (bloquearia reagendar o mesmo horário depois de cancelar)
+  // e a checagem de conflito passa a ser só na aplicação, por sobreposição
+  // de intervalo (considera duração variável de cada serviço).
+  await query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS cancelado_em TIMESTAMPTZ;`);
+  await query(`ALTER TABLE agendamentos DROP CONSTRAINT IF EXISTS agendamentos_status_check;`);
+  await query(
+    `ALTER TABLE agendamentos ADD CONSTRAINT agendamentos_status_check CHECK (status IN ('agendado', 'concluido', 'cancelado'));`
+  );
+  await query(`DROP INDEX IF EXISTS idx_agendamentos_barbeiro_data_horario;`);
+
+  // Pagamento dividido: cada venda pode ter 1+ formas de pagamento (ex.:
+  // metade pix, metade cartão). `vendas.forma_pagamento` guarda um resumo
+  // ("misto" quando há mais de uma forma); o detalhamento real fica aqui.
+  await query(`ALTER TABLE vendas DROP CONSTRAINT IF EXISTS vendas_forma_pagamento_check;`);
+  await query(
+    `ALTER TABLE vendas ADD CONSTRAINT vendas_forma_pagamento_check CHECK (forma_pagamento IN ('debito', 'credito', 'dinheiro', 'pix', 'misto'));`
+  );
+  await query(`
+    CREATE TABLE IF NOT EXISTS venda_pagamentos (
+      id SERIAL PRIMARY KEY,
+      venda_id INTEGER NOT NULL REFERENCES vendas(id),
+      forma_pagamento TEXT NOT NULL CHECK (forma_pagamento IN ('debito', 'credito', 'dinheiro', 'pix')),
+      valor REAL NOT NULL
+    );
+  `);
+
+  // Despesas (saídas de caixa: aluguel, compra de produto, contas...) —
+  // separam faturamento bruto (vendas) de lucro real nos relatórios.
+  await query(`
+    CREATE TABLE IF NOT EXISTS despesas (
+      id SERIAL PRIMARY KEY,
+      descricao TEXT NOT NULL,
+      categoria TEXT NOT NULL DEFAULT 'outros',
+      valor REAL NOT NULL,
+      data TEXT NOT NULL,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
 

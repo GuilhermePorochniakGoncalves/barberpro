@@ -5,6 +5,7 @@ import Barbeiros from "./pages/Barbeiros";
 import Agenda from "./pages/Agenda";
 import ServicosBarbeiro from "./pages/ServicosBarbeiro";
 import Produtos from "./pages/Produtos";
+import Despesas from "./pages/Despesas";
 import Relatorios from "./pages/Relatorios";
 import AgendarPublico from "./pages/AgendarPublico";
 
@@ -27,6 +28,7 @@ function AppRoutes() {
         <Route path="/barbeiros/:id/servicos" element={<ServicosBarbeiro />} />
         <Route path="/agenda" element={<Agenda />} />
         <Route path="/produtos" element={<Produtos />} />
+        <Route path="/despesas" element={<Despesas />} />
         <Route path="/relatorios" element={<Relatorios />} />
         {/* Rota pública, sem login — pensada pra virar o link que a
             barbearia divulga pro cliente marcar sozinho. */}

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import api from "../services/api";
 import { useBarbeiros } from "../context/useBarbeiros";
 import { useDisponibilidade } from "../hooks/useDisponibilidade";
-import { HORARIOS, formatarTelefone } from "../constants/schedule";
+import { HORARIOS, formatarTelefone, formatarDuracao } from "../constants/schedule";
 import { adicionarDias, ehHoje, formatarDataExibicao, hojeISO } from "../utils/date";
 import { extrairMensagemErro } from "../utils/erro";
 import { iniciais, corAvatar } from "../utils/avatar";
@@ -37,10 +37,13 @@ function AgendarPublico() {
   const [carregandoServicos, setCarregandoServicos] = useState(false);
 
   const barbeiro = barbeiros.find((b) => b.id === barbeiroId);
-  const { carregando: carregandoDisponibilidade, horarioLivre, buscarAgendamento } = useDisponibilidade(
+  const { carregando: carregandoDisponibilidade, horarioLivre, agendamentoQueCobre } = useDisponibilidade(
     barbeiroId,
     etapa === "horario" ? dataSelecionada : null
   );
+
+  const servicoObj = servicos.find((s) => s.nome === servicoSelecionado);
+  const duracaoServicoSelecionado = servicoObj?.duracao_minutos ?? 30;
 
   useEffect(() => {
     if (etapa !== "servico" || !barbeiroId) return;
@@ -232,7 +235,10 @@ function AgendarPublico() {
                       onClick={() => escolherServico(s.nome)}
                       className="w-full flex justify-between items-center bg-zinc-800 border border-zinc-700 rounded-xl p-4 hover:border-amber-700/50 transition"
                     >
-                      <span className="font-medium text-zinc-100">{s.nome}</span>
+                      <span className="text-left">
+                        <span className="font-medium text-zinc-100 block">{s.nome}</span>
+                        <span className="text-xs text-zinc-500">{formatarDuracao(s.duracao_minutos ?? 30)}</span>
+                      </span>
                       <span className="text-amber-500 font-semibold">
                         {s.preco.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                       </span>
@@ -281,8 +287,8 @@ function AgendarPublico() {
                 <>
                   <div className="grid grid-cols-3 gap-2">
                     {HORARIOS.map((h) => {
-                      const livre = horarioLivre(h);
-                      const ocupado = Boolean(buscarAgendamento(h));
+                      const livre = horarioLivre(h, duracaoServicoSelecionado);
+                      const ocupado = Boolean(agendamentoQueCobre(h));
 
                       if (livre) {
                         return (

@@ -7,6 +7,9 @@ import { useConfirm } from "../hooks/useConfirm";
 import api from "../services/api";
 import { useBarbeiros } from "../context/useBarbeiros";
 import { extrairMensagemErro } from "../utils/erro";
+import { formatarDuracao } from "../constants/schedule";
+
+const DURACOES_SUGERIDAS = [15, 30, 45, 60, 90, 120];
 
 function formatarReais(valor) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -31,6 +34,7 @@ function ServicosBarbeiro() {
   const [editandoId, setEditandoId] = useState(null);
   const [nome, setNome] = useState("");
   const [preco, setPreco] = useState("");
+  const [duracaoMinutos, setDuracaoMinutos] = useState(30);
   const [erroForm, setErroForm] = useState("");
   const [salvando, setSalvando] = useState(false);
 
@@ -56,6 +60,7 @@ function ServicosBarbeiro() {
     setEditandoId(null);
     setNome("");
     setPreco("");
+    setDuracaoMinutos(30);
     setErroForm("");
     setCriando(true);
   }
@@ -64,6 +69,7 @@ function ServicosBarbeiro() {
     setEditandoId(servico.id);
     setNome(servico.nome);
     setPreco(String(servico.preco));
+    setDuracaoMinutos(servico.duracao_minutos ?? 30);
     setErroForm("");
     setCriando(true);
   }
@@ -93,11 +99,13 @@ function ServicosBarbeiro() {
         await api.put(`/barbeiros/${barbeiroId}/servicos/${editandoId}`, {
           nome: nome.trim(),
           preco: precoNumero,
+          duracaoMinutos: Number(duracaoMinutos),
         });
       } else {
         await api.post(`/barbeiros/${barbeiroId}/servicos`, {
           nome: nome.trim(),
           preco: precoNumero,
+          duracaoMinutos: Number(duracaoMinutos),
         });
       }
       await carregarServicos();
@@ -176,9 +184,22 @@ function ServicosBarbeiro() {
               placeholder="Preço"
               value={preco}
               onChange={(e) => setPreco(e.target.value)}
-              className="w-40 bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-zinc-100 placeholder:text-zinc-500"
+              className="w-32 bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-zinc-100 placeholder:text-zinc-500"
               disabled={salvando}
             />
+            <select
+              value={duracaoMinutos}
+              onChange={(e) => setDuracaoMinutos(e.target.value)}
+              className="w-32 bg-zinc-800 border border-zinc-700 rounded-lg p-3 text-zinc-100"
+              disabled={salvando}
+              aria-label="Duração"
+            >
+              {DURACOES_SUGERIDAS.map((min) => (
+                <option key={min} value={min}>
+                  {formatarDuracao(min)}
+                </option>
+              ))}
+            </select>
             <button
               type="submit"
               disabled={salvando}
@@ -215,17 +236,19 @@ function ServicosBarbeiro() {
             <tr>
               <th className="text-left p-4 text-zinc-400 font-medium">Serviço</th>
               <th className="text-left p-4 text-zinc-400 font-medium">Preço</th>
+              <th className="text-left p-4 text-zinc-400 font-medium">Duração</th>
               <th className="text-left p-4"></th>
             </tr>
           </thead>
           <tbody>
             {carregando ? (
-              <SkeletonTableRows colunas={3} />
+              <SkeletonTableRows colunas={4} />
             ) : (
               servicos.map((s) => (
                 <tr key={s.id} className="border-t border-zinc-800">
                   <td className="p-4 font-medium text-zinc-100">{s.nome}</td>
                   <td className="p-4 text-amber-500 font-medium">{formatarReais(s.preco)}</td>
+                  <td className="p-4 text-zinc-300">{formatarDuracao(s.duracao_minutos ?? 30)}</td>
                   <td className="p-4 text-right space-x-4">
                     <button onClick={() => abrirEdicao(s)} className="text-amber-500 hover:text-amber-400 text-sm">
                       Editar
