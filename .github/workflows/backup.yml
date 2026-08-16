@@ -1,0 +1,35 @@
+name: Backup diário do banco
+
+# Roda sozinho todo dia às 06:00 UTC (03:00 no horário de Brasília) — sem
+# depender de ninguém lembrar de rodar `npm run backup` manualmente (ver
+# backend/scripts/backup.js, que também existe pra rodar na mão se
+# precisar). O Neon já mantém histórico próprio (point-in-time restore),
+# isso aqui é um backup adicional e independente, guardado como artifact
+# do GitHub por 30 dias — sem custo, sem precisar de servidor rodando.
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch: {} # também dá pra rodar manualmente pela aba Actions
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Instala cliente do Postgres
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Roda pg_dump
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          mkdir -p backups
+          nome="barberpro-$(date -u +'%Y-%m-%dT%H-%M-%S').dump"
+          pg_dump "$DATABASE_URL" --format=custom --file="backups/$nome"
+          echo "ARQUIVO=$nome" >> "$GITHUB_ENV"
+
+      - name: Guarda o backup como artifact (30 dias)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARQUIVO }}
+          path: backups/${{ env.ARQUIVO }}
+          retention-days: 30

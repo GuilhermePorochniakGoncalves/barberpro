@@ -12,6 +12,7 @@ import { HORARIOS, formatarDuracao } from "../constants/schedule";
 import { adicionarDias, ehHoje, formatarDataExibicao, hojeISO } from "../utils/date";
 import { extrairMensagemErro } from "../utils/erro";
 import { iniciais, corAvatar } from "../utils/avatar";
+import { linkWhatsApp } from "../utils/whatsapp";
 
 // Sem login: qualquer um (recepção, outro barbeiro cobrindo) gerencia a
 // agenda de qualquer barbeiro — reflete como a barbearia funciona na
@@ -473,19 +474,34 @@ function Agenda() {
                 {horarioExpandido === horario && espera.length > 0 && (
                   <div className="ml-14 -mt-1 mb-1 bg-zinc-950/60 border border-zinc-800 rounded-lg p-3 space-y-2">
                     {espera.map((entrada) => (
-                      <div key={entrada.id} className="flex items-center justify-between text-sm">
+                      <div key={entrada.id} className="flex items-center justify-between text-sm gap-2">
                         <span className="text-zinc-300">
                           {entrada.nome} • {entrada.telefone}
                           {entrada.status === "notificado" && (
                             <span className="text-amber-500 ml-2">notificado</span>
                           )}
                         </span>
-                        <button
-                          onClick={() => removerDaListaEspera(entrada.id)}
-                          className="text-zinc-600 hover:text-red-400 text-xs"
-                        >
-                          remover
-                        </button>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          {entrada.status === "notificado" && (
+                            <a
+                              href={linkWhatsApp(
+                                entrada.telefone,
+                                `Oi ${entrada.nome}! O horário das ${entrada.horario} que você estava aguardando na lista de espera abriu. Quer confirmar?`
+                              )}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-emerald-500 hover:text-emerald-400 text-xs whitespace-nowrap"
+                            >
+                              avisar no WhatsApp
+                            </a>
+                          )}
+                          <button
+                            onClick={() => removerDaListaEspera(entrada.id)}
+                            className="text-zinc-600 hover:text-red-400 text-xs"
+                          >
+                            remover
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>

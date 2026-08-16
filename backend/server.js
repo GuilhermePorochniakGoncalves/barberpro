@@ -8,6 +8,7 @@ try {
 
 const express = require("express");
 const cors = require("cors");
+const rateLimit = require("express-rate-limit");
 const db = require("./db");
 const {
   validarAgendamento,
@@ -78,12 +79,36 @@ app.get("/painel/verificar", (req, res) => {
 // outro o tempo todo, então uma conta por barbeiro atrapalhava mais do
 // que ajudava. Ver histórico do projeto se precisar reintroduzir login.
 
+// Rota pública /agendar não tem senha nem captcha (de propósito — tem que
+// ser fácil pro cliente final) — limita quantas vezes o mesmo IP consegue
+// criar agendamento/entrar na lista de espera num período curto, pra
+// dificultar spam/bot sem atrapalhar uso normal (uma pessoa não marca 10
+// horários em 15 minutos).
+// Desativado em teste: a suíte cria dezenas de agendamentos em sequência
+// a partir do mesmo IP (localhost), o que bateria no limite artificialmente.
+const limitadorCriacaoPublica =
+  process.env.NODE_ENV === "test"
+    ? (req, res, next) => next()
+    : rateLimit({
+        windowMs: 15 * 60 * 1000,
+        limit: 8,
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: { erro: "Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente de novo." },
+      });
+
 // ---------- Helpers ----------
 
 // Map<nomeDoServico, duracaoMinutos> — serve tanto pra validar o nome do
 // serviço escolhido (validarAgendamento espera um array; usamos as chaves)
 // quanto pra saber quanto tempo o agendamento vai ocupar na agenda.
 async function servicosAtivosDoBarbeiro(barbeiroId) {
+  // barbeiroId inválido (corpo malformado, ex.: {} sem barbeiroId) vira NaN
+  // — mandar isso como parâmetro $1 pro Postgres estoura erro de driver
+  // (500) em vez de simplesmente não achar nada. Curto-circuita pra Map
+  // vazio, que cai certinho na validação normal de "serviço inválido".
+  if (!Number.isInteger(barbeiroId)) return new Map();
+
   const rows = await db.many(
     "SELECT nome, duracao_minutos FROM catalogo_itens WHERE tipo = 'servico' AND ativo = TRUE AND barbeiro_id = $1",
     [barbeiroId]
@@ -421,7 +446,7 @@ app.get("/barbeiros/:id/lista-espera", async (req, res) => {
   res.json(entradas);
 });
 
-app.post("/barbeiros/:id/lista-espera", async (req, res) => {
+app.post("/barbeiros/:id/lista-espera", limitadorCriacaoPublica, async (req, res) => {
   const barbeiroId = Number(req.params.id);
   const barbeiro = await db.one("SELECT * FROM barbeiros WHERE id = $1", [barbeiroId]);
   if (!barbeiro) return res.status(404).json({ erro: "Barbeiro não encontrado." });
@@ -579,7 +604,7 @@ app.get("/agendamentos", async (req, res) => {
   res.json(agendamentos);
 });
 
-app.post("/agendamentos", async (req, res) => {
+app.post("/agendamentos", limitadorCriacaoPublica, async (req, res) => {
   const barbeiroIdBruto = Number(req.body?.barbeiroId);
   const servicosMap = await servicosAtivosDoBarbeiro(barbeiroIdBruto);
   const { errors, valido, data } = validarAgendamento(req.body, [...servicosMap.keys()]);

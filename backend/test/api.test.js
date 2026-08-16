@@ -8,6 +8,12 @@ test("health check responde ok", comServidor(async ({ req }) => {
   assert.deepEqual(data, { status: "ok" });
 }));
 
+test("agendamento com corpo vazio/malformado dá 400, não 500", comServidor(async ({ req }) => {
+  const vazio = await req("POST", "/agendamentos", {});
+  assert.equal(vazio.status, 400);
+  assert.ok(Array.isArray(vazio.data.erros));
+}));
+
 test("painel: rota interna sem senha é recusada, rota pública funciona sem senha", comServidor(async ({ req }) => {
   const semSenha = await req("GET", "/clientes", undefined, { semSenha: true });
   assert.equal(semSenha.status, 401);

@@ -10,6 +10,7 @@ function Sidebar({ aberta = false, onFechar, atalhosAbertos = false, onAlternarA
     { nome: "Agenda", caminho: "/agenda" },
     { nome: "Produtos", caminho: "/produtos" },
     { nome: "Despesas", caminho: "/despesas" },
+    { nome: "Lembretes", caminho: "/lembretes" },
     { nome: "Clientes", caminho: "/clientes" },
     { nome: "Relatórios", caminho: "/relatorios" },
   ];

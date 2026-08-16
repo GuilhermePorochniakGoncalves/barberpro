@@ -35,6 +35,15 @@ cd backend && npm test
 cd frontend && npm test
 ```
 
+**Testes end-to-end** (Playwright — sobe backend + frontend sozinho contra o mesmo banco em memória
+dos testes do backend, e dirige um navegador de verdade pelos fluxos principais: senha do painel,
+cadastro de barbeiro/serviço → agendamento → finalizar atendimento → relatório, e o agendamento
+público pela raiz do site):
+```
+cd frontend
+npm run test:e2e
+```
+
 ---
 
 ## Deploy grátis: backend no Render + banco no Neon + frontend no Netlify
@@ -140,14 +149,23 @@ a cada execução. Requer o `pg_dump` instalado na máquina (vem com qualquer in
 `apt install postgresql-client` / `brew install libpq`; no Windows, instala junto com o
 [instalador oficial do Postgres](https://www.postgresql.org/download/windows/)).
 
-**Pra rodar sozinho todo dia**, sem precisar lembrar: agende o comando `npm run backup` (dentro de
-`backend/`) no Agendador de Tarefas do Windows, ou num `cron` se rodar em Linux/Mac. O Render (plano
-free) não tem disco persistente nem cron nativo, então esse agendamento é pensado pra rodar numa máquina
-sua, não no servidor — é um backup "de segurança pessoal" complementar ao do Neon, não o principal.
+### Backup automático (sem precisar rodar nada na mão)
 
-**Pra restaurar** um `.dump` gerado pelo script:
+Já configurado: `.github/workflows/backup.yml` roda sozinho **todo dia às 03:00 (horário de Brasília)**
+via GitHub Actions — não depende de nenhuma máquina sua ligada nem do Render (plano free não tem disco
+persistente nem cron). O secret `DATABASE_URL` já está configurado no repositório (Settings → Secrets
+and variables → Actions).
+
+**Pra baixar um backup**: na aba **"Actions"** do repositório no GitHub → clique no workflow "Backup
+diário do banco" → escolha uma execução → o arquivo `.dump` aparece em "Artifacts", pronto pra baixar.
+Fica guardado por 30 dias.
+
+**Pra rodar fora do horário programado**: aba "Actions" → "Backup diário do banco" → botão **"Run
+workflow"**.
+
+**Pra restaurar** um `.dump` (seja do GitHub Actions ou do script manual acima):
 ```
-pg_restore --clean --if-exists --dbname="SUA_DATABASE_URL_AQUI" backend/backups/barberpro-2026-08-12T....dump
+pg_restore --clean --if-exists --dbname="SUA_DATABASE_URL_AQUI" caminho/do/arquivo.dump
 ```
 ⚠️ `--clean` apaga as tabelas existentes antes de recriar — só rode isso contra o banco que você
 realmente quer sobrescrever (nunca contra produção sem ter certeza).

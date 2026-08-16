@@ -6,6 +6,7 @@ import Agenda from "./pages/Agenda";
 import ServicosBarbeiro from "./pages/ServicosBarbeiro";
 import Produtos from "./pages/Produtos";
 import Despesas from "./pages/Despesas";
+import Lembretes from "./pages/Lembretes";
 import Relatorios from "./pages/Relatorios";
 import AgendarPublico from "./pages/AgendarPublico";
 import PainelProtegido from "./components/PainelProtegido";
@@ -40,6 +41,7 @@ function AppRoutes() {
           <Route path="/agenda" element={<Agenda />} />
           <Route path="/produtos" element={<Produtos />} />
           <Route path="/despesas" element={<Despesas />} />
+          <Route path="/lembretes" element={<Lembretes />} />
           <Route path="/relatorios" element={<Relatorios />} />
         </Route>
       </Routes>
