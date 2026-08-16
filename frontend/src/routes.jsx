@@ -8,6 +8,7 @@ import Produtos from "./pages/Produtos";
 import Despesas from "./pages/Despesas";
 import Relatorios from "./pages/Relatorios";
 import AgendarPublico from "./pages/AgendarPublico";
+import PainelProtegido from "./components/PainelProtegido";
 
 // Redireciona a rota antiga /barbeiros/:id (era o ponto de entrada da
 // agenda de um barbeiro) pra /agenda?barbeiro=:id — mantém links antigos
@@ -21,19 +22,26 @@ function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/clientes" element={<Clients />} />
-        <Route path="/barbeiros" element={<Barbeiros />} />
-        <Route path="/barbeiros/:id" element={<RedirecionarParaAgenda />} />
-        <Route path="/barbeiros/:id/servicos" element={<ServicosBarbeiro />} />
-        <Route path="/agenda" element={<Agenda />} />
-        <Route path="/produtos" element={<Produtos />} />
-        <Route path="/despesas" element={<Despesas />} />
-        <Route path="/relatorios" element={<Relatorios />} />
-        {/* Rota pública, sem login — pensada pra virar o link que a
-            barbearia divulga pro cliente marcar sozinho. */}
+        {/* Raiz pública, sem senha — é o link que a barbearia divulga pro
+            cliente final marcar sozinho. Fica na raiz de propósito: se
+            alguém editar a URL e apagar o "/agendar", o pior caso é cair
+            de novo aqui, nunca no painel de gestão (ver PainelProtegido). */}
+        <Route path="/" element={<AgendarPublico />} />
         <Route path="/agendar" element={<AgendarPublico />} />
         <Route path="/agendar/:barbeiroId" element={<AgendarPublico />} />
+
+        {/* Painel de gestão — atrás da senha única da barbearia. */}
+        <Route element={<PainelProtegido />}>
+          <Route path="/painel" element={<Dashboard />} />
+          <Route path="/clientes" element={<Clients />} />
+          <Route path="/barbeiros" element={<Barbeiros />} />
+          <Route path="/barbeiros/:id" element={<RedirecionarParaAgenda />} />
+          <Route path="/barbeiros/:id/servicos" element={<ServicosBarbeiro />} />
+          <Route path="/agenda" element={<Agenda />} />
+          <Route path="/produtos" element={<Produtos />} />
+          <Route path="/despesas" element={<Despesas />} />
+          <Route path="/relatorios" element={<Relatorios />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );

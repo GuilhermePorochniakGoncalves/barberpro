@@ -1,10 +1,11 @@
 import { Link, useLocation } from "react-router-dom";
+import { CHAVE_SENHA_PAINEL } from "../services/api";
 
 function Sidebar({ aberta = false, onFechar, atalhosAbertos = false, onAlternarAtalhos }) {
   const location = useLocation();
 
   const menus = [
-    { nome: "Dashboard", caminho: "/" },
+    { nome: "Dashboard", caminho: "/painel" },
     { nome: "Barbeiros", caminho: "/barbeiros" },
     { nome: "Agenda", caminho: "/agenda" },
     { nome: "Produtos", caminho: "/produtos" },
@@ -12,6 +13,11 @@ function Sidebar({ aberta = false, onFechar, atalhosAbertos = false, onAlternarA
     { nome: "Clientes", caminho: "/clientes" },
     { nome: "Relatórios", caminho: "/relatorios" },
   ];
+
+  function sair() {
+    localStorage.removeItem(CHAVE_SENHA_PAINEL);
+    window.location.href = "/";
+  }
 
   return (
     <>
@@ -61,10 +67,7 @@ function Sidebar({ aberta = false, onFechar, atalhosAbertos = false, onAlternarA
 
         <nav className="space-y-2 flex-1">
           {menus.map((menu) => {
-            const ativo =
-              menu.caminho === "/"
-                ? location.pathname === "/"
-                : location.pathname.startsWith(menu.caminho);
+            const ativo = location.pathname.startsWith(menu.caminho);
 
             return (
               <Link
@@ -82,6 +85,13 @@ function Sidebar({ aberta = false, onFechar, atalhosAbertos = false, onAlternarA
             );
           })}
         </nav>
+
+        <button
+          onClick={sair}
+          className="text-sm text-zinc-600 hover:text-zinc-400 text-left px-4 py-2"
+        >
+          Sair do painel
+        </button>
       </div>
     </>
   );

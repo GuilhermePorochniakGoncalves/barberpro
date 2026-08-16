@@ -26,6 +26,53 @@ const app = express();
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
 app.use(express.json());
 
+// ---------- Proteção do painel interno ----------
+//
+// Sem login por pessoa (decisão do projeto — ver comentário abaixo), mas o
+// painel de gestão não pode ficar aberto pra qualquer visitante que ache a
+// URL: uma senha ÚNICA da barbearia (não por usuário) barra acesso casual.
+// As rotas que a tela pública /agendar usa continuam sem senha — é o link
+// que a barbearia divulga pro cliente final, tem que funcionar sem fricção.
+const ROTAS_PUBLICAS = [
+  { metodo: "GET", regex: /^\/health$/ },
+  { metodo: "GET", regex: /^\/barbeiros$/ },
+  { metodo: "GET", regex: /^\/catalogo$/ },
+  { metodo: "GET", regex: /^\/agendamentos$/ },
+  { metodo: "GET", regex: /^\/barbeiros\/\d+\/bloqueios$/ },
+  { metodo: "POST", regex: /^\/agendamentos$/ },
+  { metodo: "POST", regex: /^\/barbeiros\/\d+\/lista-espera$/ },
+];
+
+function rotaEhPublica(req) {
+  return ROTAS_PUBLICAS.some((r) => r.metodo === req.method && r.regex.test(req.path));
+}
+
+app.use((req, res, next) => {
+  if (rotaEhPublica(req)) return next();
+
+  if (!process.env.PANEL_PASSWORD) {
+    // Sem a variável configurada, bloqueia tudo (menos as rotas públicas
+    // acima) em vez de abrir por omissão — força configurar de propósito
+    // em vez de vazar o painel inteiro por alguém esquecer a variável.
+    return res.status(503).json({
+      erro: "Painel não configurado: defina PANEL_PASSWORD no ambiente do servidor.",
+    });
+  }
+
+  if (req.get("X-Panel-Password") !== process.env.PANEL_PASSWORD) {
+    return res.status(401).json({ erro: "Senha do painel inválida ou ausente." });
+  }
+
+  next();
+});
+
+// Usado pelo frontend só pra testar a senha digitada (ver
+// PainelProtegido.jsx) — se chegou até aqui é porque passou pelo
+// middleware acima, então a senha já está certa.
+app.get("/painel/verificar", (req, res) => {
+  res.json({ ok: true });
+});
+
 // Sem login: qualquer pessoa (recepção, qualquer barbeiro) gerencia a
 // agenda de qualquer barbeiro — na prática do salão, um barbeiro cobre o
 // outro o tempo todo, então uma conta por barbeiro atrapalhava mais do

@@ -460,7 +460,7 @@ function AgendarPublico() {
         </div>
 
         <button
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/painel")}
           className="text-zinc-600 hover:text-zinc-400 text-sm mt-6 block mx-auto"
         >
           Sou barbeiro/atendente — ir pro painel

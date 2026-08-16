@@ -8,6 +8,28 @@ test("health check responde ok", comServidor(async ({ req }) => {
   assert.deepEqual(data, { status: "ok" });
 }));
 
+test("painel: rota interna sem senha é recusada, rota pública funciona sem senha", comServidor(async ({ req }) => {
+  const semSenha = await req("GET", "/clientes", undefined, { semSenha: true });
+  assert.equal(semSenha.status, 401);
+
+  const comSenha = await req("GET", "/clientes");
+  assert.equal(comSenha.status, 200);
+
+  // /barbeiros e /catalogo são as rotas que a tela pública /agendar usa —
+  // precisam funcionar sem senha nenhuma.
+  const barbeirosSemSenha = await req("GET", "/barbeiros", undefined, { semSenha: true });
+  assert.equal(barbeirosSemSenha.status, 200);
+
+  const catalogoSemSenha = await req("GET", "/catalogo", undefined, { semSenha: true });
+  assert.equal(catalogoSemSenha.status, 200);
+
+  const verificar = await req("GET", "/painel/verificar");
+  assert.equal(verificar.status, 200);
+
+  const verificarSemSenha = await req("GET", "/painel/verificar", undefined, { semSenha: true });
+  assert.equal(verificarSemSenha.status, 401);
+}));
+
 test("catálogo vem semeado só com produtos (serviço é cadastrado por barbeiro)", comServidor(async ({ req }) => {
   const { status, data } = await req("GET", "/catalogo");
   assert.equal(status, 200);

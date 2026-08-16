@@ -6,8 +6,10 @@ lista de espera, clientes com histórico, agendamento público online e relatór
 - `backend/` — API Node.js/Express + Postgres.
 - `frontend/` — SPA React (Vite).
 
-Sem login: qualquer pessoa (recepção, qualquer barbeiro) gerencia a agenda de qualquer barbeiro —
-decisão intencional, ver comentário no topo de `backend/server.js`.
+Sem login por pessoa: qualquer barbeiro/recepção gerencia a agenda de qualquer barbeiro — decisão
+intencional, ver comentário no topo de `backend/server.js`. O painel inteiro fica atrás de uma senha
+única da barbearia (`PANEL_PASSWORD`), só pra barrar visitante casual — a tela pública de agendamento
+(`/agendar`, também servida na raiz `/`) não precisa dessa senha.
 
 ## Rodando localmente
 
@@ -73,6 +75,10 @@ Você já tem uma conta no Neon com um banco criado. Só precisa da **connection
    - `CORS_ORIGIN` → por enquanto pode deixar `*`. **Depois de criar o site no Netlify (Parte 3), volte
      aqui e troque pelo endereço do Netlify** (ex. `https://barberpro.netlify.app`), pra travar o backend
      pra só aceitar chamadas do seu site.
+   - `PANEL_PASSWORD` → **obrigatória**, sem ela o painel inteiro fica bloqueado (a tela pública de
+     agendamento continua funcionando normal). Escolha uma senha só, que qualquer barbeiro/recepção vai
+     digitar pra entrar no painel — não é senha por pessoa, é só uma barreira contra visitante que ache
+     a URL por acaso.
    - Não precisa adicionar `PORT` — o Render define isso sozinho.
 6. Clique em **"Create Web Service"** (ou "Deploy Web Service") no final da página.
 7. Espere a tela de logs rodar (leva 1–3 minutos na primeira vez). Quando aparecer algo como

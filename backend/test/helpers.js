@@ -2,6 +2,9 @@
 // ser setado ANTES de importar o server/db (module-load decide qual banco
 // usar uma vez só, olhando NODE_ENV).
 process.env.NODE_ENV = "test";
+// Senha fixa de teste — o middleware de proteção do painel (ver server.js)
+// bloqueia tudo se PANEL_PASSWORD não estiver definida.
+process.env.PANEL_PASSWORD = process.env.PANEL_PASSWORD || "teste-senha-painel";
 
 const db = require("../db");
 const app = require("../server");
@@ -15,10 +18,15 @@ function comServidor(fn) {
     const { port } = server.address();
     const base = `http://localhost:${port}`;
 
-    async function req(method, path, body) {
+    // Manda a senha do painel por padrão (a maioria das rotas testadas é
+    // interna) — inofensivo nas rotas públicas, que ignoram esse header.
+    async function req(method, path, body, { semSenha = false } = {}) {
       const response = await fetch(base + path, {
         method,
-        headers: body ? { "Content-Type": "application/json" } : undefined,
+        headers: {
+          ...(body ? { "Content-Type": "application/json" } : {}),
+          ...(semSenha ? {} : { "X-Panel-Password": process.env.PANEL_PASSWORD }),
+        },
         body: body ? JSON.stringify(body) : undefined,
       });
       const data = response.status === 204 ? null : await response.json();
