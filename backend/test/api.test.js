@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { comServidor } = require("./helpers");
+const { comServidor, mesAtualBrasilia } = require("./helpers");
 
 test("health check responde ok", comServidor(async ({ req }) => {
   const { status, data } = await req("GET", "/health");
@@ -151,7 +151,7 @@ test("relatório mensal agrega faturamento por barbeiro e forma de pagamento", c
   // Consulta sem filtro de barbeiro: outros testes do mesmo arquivo também
   // criam vendas no banco em memória compartilhado, então as asserções
   // abaixo procuram a entrada do Zaqueu em vez de assumir totais globais.
-  const mesAtual = new Date().toISOString().slice(0, 7);
+  const mesAtual = mesAtualBrasilia();
   const relatorio = await req("GET", `/relatorios/mensal?mes=${mesAtual}`);
   assert.equal(relatorio.status, 200);
   assert.ok(relatorio.data.totalAtendimentos >= 1);

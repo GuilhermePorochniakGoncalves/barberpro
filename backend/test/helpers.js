@@ -45,4 +45,18 @@ function comServidor(fn) {
   };
 }
 
-module.exports = { app, comServidor };
+// 'YYYY-MM-DD'/'YYYY-MM' de hoje no fuso de Brasília, não UTC — os
+// relatórios agora bucketam por dia civil de Brasília (ver
+// limitesDoDiaBrasilia em server.js); um teste calculando "hoje" em UTC
+// pode cair num dia diferente do que o servidor considera "hoje" entre
+// 21h e meia-noite (horário de Brasília), quando UTC já virou o dia
+// seguinte.
+function hojeBrasilia() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+}
+
+function mesAtualBrasilia() {
+  return hojeBrasilia().slice(0, 7);
+}
+
+module.exports = { app, comServidor, hojeBrasilia, mesAtualBrasilia };

@@ -4,7 +4,7 @@
 // estoque de produto na finalização de atendimento.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { comServidor } = require("./helpers");
+const { comServidor, hojeBrasilia } = require("./helpers");
 
 test("bloqueio de agenda: bloquear um horário recusa agendamento nele, mas libera outros horários do dia", comServidor(async ({ req, criarBarbeiro }) => {
   const barbeiro = await criarBarbeiro("Zaqueu");
@@ -169,7 +169,7 @@ test("fechamento do dia: agrega total por tipo de item e por forma de pagamento"
   // também vendem algo "hoje" contribuem pro mesmo dia. Por isso os
   // asserts abaixo checam "pelo menos essa venda está contabilizada", não
   // o total exato do dia.
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBrasilia();
   const relatorio = await req("GET", `/relatorios/diario?data=${hoje}`);
   assert.equal(relatorio.status, 200);
   assert.ok(relatorio.data.atendimentos >= 1);
@@ -337,7 +337,7 @@ test("pagamento dividido: soma dos pagamentos precisa bater com o total, e cada 
   assert.equal(venda.data.forma_pagamento, "misto");
   assert.equal(venda.data.pagamentos.length, 2);
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBrasilia();
   const relatorio = await req("GET", `/relatorios/diario?data=${hoje}`);
   const pix = relatorio.data.porFormaPagamento.find((f) => f.formaPagamento === "pix");
   const credito = relatorio.data.porFormaPagamento.find((f) => f.formaPagamento === "credito");
@@ -346,7 +346,7 @@ test("pagamento dividido: soma dos pagamentos precisa bater com o total, e cada 
 }));
 
 test("despesas: cadastra, some do lucro do dia/mês, e dá pra remover", comServidor(async ({ req }) => {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBrasilia();
 
   const invalida = await req("POST", "/despesas", { descricao: "", valor: -10, data: hoje });
   assert.equal(invalida.status, 400);

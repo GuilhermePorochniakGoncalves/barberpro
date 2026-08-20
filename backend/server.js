@@ -10,6 +10,7 @@ const express = require("express");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const db = require("./db");
+const { limitesDoDiaBrasilia, limitesDoMesBrasilia } = require("./horario");
 const {
   validarAgendamento,
   validarCliente,
@@ -735,12 +736,14 @@ app.get("/vendas", async (req, res) => {
     condicoes.push(`v.barbeiro_id = $${params.length}`);
   }
   if (de) {
-    params.push(de);
-    condicoes.push(`v.criado_em::date >= $${params.length}::date`);
+    const [inicio] = limitesDoDiaBrasilia(de);
+    params.push(inicio);
+    condicoes.push(`v.criado_em >= $${params.length}`);
   }
   if (ate) {
-    params.push(ate);
-    condicoes.push(`v.criado_em::date <= $${params.length}::date`);
+    const [, fim] = limitesDoDiaBrasilia(ate);
+    params.push(fim);
+    condicoes.push(`v.criado_em < $${params.length}`);
   }
 
   const where = condicoes.length ? `WHERE ${condicoes.join(" AND ")}` : "";
@@ -906,20 +909,21 @@ app.delete("/despesas/:id", async (req, res) => {
 
 app.get("/relatorios/diario", async (req, res) => {
   const data = req.query.data || new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+  const [inicioDia, fimDia] = limitesDoDiaBrasilia(data);
 
   const totais = await db.one(
     `SELECT COUNT(*) AS atendimentos, COALESCE(SUM(valor_total), 0) AS "totalArrecadado"
-     FROM vendas WHERE criado_em::date = $1::date`,
-    [data]
+     FROM vendas WHERE criado_em >= $1 AND criado_em < $2`,
+    [inicioDia, fimDia]
   );
 
   const porTipoRows = await db.many(
     `SELECT vi.tipo, COALESCE(SUM(vi.preco * vi.quantidade), 0) AS total
      FROM venda_itens vi
      JOIN vendas v ON v.id = vi.venda_id
-     WHERE v.criado_em::date = $1::date
+     WHERE v.criado_em >= $1 AND v.criado_em < $2
      GROUP BY vi.tipo`,
-    [data]
+    [inicioDia, fimDia]
   );
   const porTipo = { servico: 0, produto: 0 };
   for (const row of porTipoRows) {
@@ -933,10 +937,10 @@ app.get("/relatorios/diario", async (req, res) => {
     `SELECT vp.forma_pagamento AS "formaPagamento", COUNT(*) AS quantidade, COALESCE(SUM(vp.valor), 0) AS total
      FROM venda_pagamentos vp
      JOIN vendas v ON v.id = vp.venda_id
-     WHERE v.criado_em::date = $1::date
+     WHERE v.criado_em >= $1 AND v.criado_em < $2
      GROUP BY vp.forma_pagamento
      ORDER BY quantidade DESC`,
-    [data]
+    [inicioDia, fimDia]
   );
 
   const { total: totalDespesasBruto } = await db.one(
@@ -968,11 +972,12 @@ app.get("/relatorios/diario", async (req, res) => {
 
 app.get("/relatorios/mensal", async (req, res) => {
   const mes = req.query.mes || new Date().toISOString().slice(0, 7); // 'YYYY-MM'
+  const [inicioMes, fimMes] = limitesDoMesBrasilia(mes);
 
   const totais = await db.one(
     `SELECT COUNT(*) AS "totalAtendimentos", COALESCE(SUM(valor_total), 0) AS "faturamentoTotal"
-     FROM vendas WHERE to_char(criado_em, 'YYYY-MM') = $1`,
-    [mes]
+     FROM vendas WHERE criado_em >= $1 AND criado_em < $2`,
+    [inicioMes, fimMes]
   );
 
   const porBarbeiro = await db.many(
@@ -980,20 +985,20 @@ app.get("/relatorios/mensal", async (req, res) => {
             COUNT(*) AS atendimentos, COALESCE(SUM(v.valor_total), 0) AS faturamento
      FROM vendas v
      JOIN barbeiros b ON b.id = v.barbeiro_id
-     WHERE to_char(v.criado_em, 'YYYY-MM') = $1
+     WHERE v.criado_em >= $1 AND v.criado_em < $2
      GROUP BY b.id
      ORDER BY faturamento DESC`,
-    [mes]
+    [inicioMes, fimMes]
   );
 
   const porFormaPagamento = await db.many(
     `SELECT vp.forma_pagamento AS "formaPagamento", COUNT(*) AS quantidade, COALESCE(SUM(vp.valor), 0) AS faturamento
      FROM venda_pagamentos vp
      JOIN vendas v ON v.id = vp.venda_id
-     WHERE to_char(v.criado_em, 'YYYY-MM') = $1
+     WHERE v.criado_em >= $1 AND v.criado_em < $2
      GROUP BY vp.forma_pagamento
      ORDER BY quantidade DESC`,
-    [mes]
+    [inicioMes, fimMes]
   );
 
   // `despesas.data` é texto 'YYYY-MM-DD' — LIKE 'YYYY-MM%' em vez de

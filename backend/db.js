@@ -14,20 +14,6 @@ if (process.env.NODE_ENV === "test") {
     name: "now",
     implementation: () => new Date(),
   });
-  // pg-mem não implementa to_char nativamente — só cobrimos o único uso
-  // real do projeto (relatório mensal: to_char(col, 'YYYY-MM')).
-  mem.public.registerFunction({
-    name: "to_char",
-    args: ["timestamptz", "text"],
-    returns: "text",
-    implementation: (ts, fmt) => {
-      const d = ts instanceof Date ? ts : new Date(ts);
-      if (fmt === "YYYY-MM") {
-        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-      }
-      return d.toISOString();
-    },
-  });
   const adapter = mem.adapters.createPg();
   pool = new adapter.Pool();
 } else {
