@@ -28,7 +28,10 @@ jobs:
         run: |
           mkdir -p backups
           nome="barberpro-$(date -u +'%Y-%m-%dT%H-%M-%S').dump"
-          pg_dump "$DATABASE_URL" --format=custom --file="backups/$nome"
+          # O runner ubuntu-latest já vem com um pg_dump v16 em /usr/bin,
+          # que fica na frente do v18 recém-instalado no PATH — chama o
+          # binário certo direto, sem depender de qual "pg_dump" o PATH acha.
+          /usr/lib/postgresql/18/bin/pg_dump "$DATABASE_URL" --format=custom --file="backups/$nome"
           echo "ARQUIVO=$nome" >> "$GITHUB_ENV"
 
       - name: Guarda o backup como artifact (30 dias)
