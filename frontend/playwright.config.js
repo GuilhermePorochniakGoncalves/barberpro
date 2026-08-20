@@ -17,6 +17,13 @@ export default defineConfig({
     baseURL: `http://localhost:${PORTA_FRONTEND}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // O backend bucketa dia/mês em horário de Brasília, fixo, não importa
+    // onde o servidor rode (ver backend/horario.js). Sem isso, o navegador
+    // do teste herda o fuso da máquina que roda o Playwright — em CI
+    // (GitHub Actions) isso é UTC, que descasa da data que o backend
+    // considera "hoje" bem à noite/começo da madrugada. Fixando aqui, o
+    // teste sempre simula o que um usuário de verdade (no Brasil) veria.
+    timezoneId: "America/Sao_Paulo",
   },
   webServer: [
     {

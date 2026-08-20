@@ -26,4 +26,17 @@ function limitesDoMesBrasilia(mesISO) {
   return [inicio.toISOString(), fim.toISOString()];
 }
 
-module.exports = { limitesDoDiaBrasilia, limitesDoMesBrasilia };
+// 'YYYY-MM-DD'/'YYYY-MM' de hoje em Brasília — usado como default quando a
+// rota é chamada sem `?data=`/`?mes=` (a UI sempre manda explícito, vindo
+// do relógio local do navegador de quem usa; isso aqui é só uma rede de
+// segurança pra quem chamar a API direto). `new Date().toISOString()`
+// seria UTC, o mesmo bug que este módulo inteiro existe pra evitar.
+function hojeBrasilia() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+}
+
+function mesAtualBrasilia() {
+  return hojeBrasilia().slice(0, 7);
+}
+
+module.exports = { limitesDoDiaBrasilia, limitesDoMesBrasilia, hojeBrasilia, mesAtualBrasilia };

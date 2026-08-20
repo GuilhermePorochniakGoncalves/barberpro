@@ -393,11 +393,10 @@ function RelatorioMensal() {
 // (ver DELETE /agendamentos/:id no backend). Útil pra ter uma noção de
 // no-show/cancelamento, não só o que foi de fato atendido.
 function Cancelamentos() {
-  const [de, setDe] = useState(() => {
-    const d = new Date();
-    d.setDate(1);
-    return d.toISOString().slice(0, 10);
-  });
+  // `${mesAtualISO()}-01` em vez de `new Date().toISOString()` — toISOString
+  // converte pra UTC, que não bate com o dia local perto da virada da
+  // meia-noite (mesmo motivo do backend usar horario.js pros relatórios).
+  const [de, setDe] = useState(() => `${mesAtualISO()}-01`);
   const [ate, setAte] = useState(hojeISO());
   const [relatorio, setRelatorio] = useState(null);
   const [carregando, setCarregando] = useState(true);

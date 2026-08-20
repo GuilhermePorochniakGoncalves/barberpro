@@ -10,7 +10,7 @@ const express = require("express");
 const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 const db = require("./db");
-const { limitesDoDiaBrasilia, limitesDoMesBrasilia } = require("./horario");
+const { limitesDoDiaBrasilia, limitesDoMesBrasilia, hojeBrasilia, mesAtualBrasilia } = require("./horario");
 const {
   validarAgendamento,
   validarCliente,
@@ -908,7 +908,7 @@ app.delete("/despesas/:id", async (req, res) => {
 // ---------- Relatórios ----------
 
 app.get("/relatorios/diario", async (req, res) => {
-  const data = req.query.data || new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+  const data = req.query.data || hojeBrasilia(); // 'YYYY-MM-DD'
   const [inicioDia, fimDia] = limitesDoDiaBrasilia(data);
 
   const totais = await db.one(
@@ -971,7 +971,7 @@ app.get("/relatorios/diario", async (req, res) => {
 });
 
 app.get("/relatorios/mensal", async (req, res) => {
-  const mes = req.query.mes || new Date().toISOString().slice(0, 7); // 'YYYY-MM'
+  const mes = req.query.mes || mesAtualBrasilia(); // 'YYYY-MM'
   const [inicioMes, fimMes] = limitesDoMesBrasilia(mes);
 
   const totais = await db.one(
